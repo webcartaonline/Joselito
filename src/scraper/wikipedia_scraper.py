@@ -40,7 +40,7 @@ class WikipediaScraper:
 
         paragraphs = [
             self._clean_text(p.get_text())
-            for p in soup.select("div.mw-parser-output > p")
+            for p in soup.select("div.mw-parser-output p")
             if self._clean_text(p.get_text())
         ][: self.max_paragraphs]
 
