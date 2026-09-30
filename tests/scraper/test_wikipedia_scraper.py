@@ -33,3 +33,7 @@ def test_get_content_missing_title(mock_get):
     mock_get.return_value = Mock(text="<p>no title</p>", raise_for_status=lambda: None)
     with pytest.raises(ScraperError):
         WikipediaScraper().get_content("Python")
+
+def test_clean_text_removes_wikipedia_markers():
+    dirty_text = "As of 2026[update]\xa0the version is stable[1]"
+    assert WikipediaScraper._clean_text(dirty_text) == "As of 2026 the version is stable"
