@@ -1,0 +1,64 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables and local configuration
+.env
+.env.*
+!.env.example
+
+# Packaging and build artifacts
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg
+MANIFEST
+
+# Test and coverage artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+nosetests.xml
+pytestdebug.log
+
+# Generated application files
+output/*
+logs/*
+!output/.gitkeep
+!logs/.gitkeep
+
+# IDE and editor files
+.idea/
+.vscode/
+*.iml
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local tool state
+.python-version
