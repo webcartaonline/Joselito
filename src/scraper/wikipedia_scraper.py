@@ -28,7 +28,8 @@ class WikipediaScraper:
 
     @staticmethod
     def _clean_text(text: str) -> str:
-        return re.sub(r"\[\d+\]", "", text).strip()
+        text = re.sub(r"\[(?:\d+|update|citation needed)\]", "", text)
+        return text.replace("\xa0", " ").strip()
 
     def get_content(self, topic: str) -> dict:
         html = self._download_html(self._build_url(topic))
