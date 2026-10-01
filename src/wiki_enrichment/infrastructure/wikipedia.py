@@ -51,10 +51,30 @@ class WikipediaSourceAdapter:
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
-        results = response.json()["query"]["search"]
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise WikiEnrichmentError(
+                "Wikipedia returned invalid JSON for the search"
+            ) from exc
+
+        if not isinstance(payload, dict):
+            raise WikiEnrichmentError("Wikipedia returned an invalid search payload")
+        if "error" in payload:
+            raise WikiEnrichmentError("Wikipedia returned an API error")
+
+        query = payload.get("query")
+        results = query.get("search") if isinstance(query, dict) else None
+        if not isinstance(results, list):
+            raise WikiEnrichmentError("Wikipedia returned an invalid search result")
         if not results:
             raise ResourceNotFoundError(f"No Wikipedia results for '{topic}'")
-        return results[0]["title"]
+
+        first_result = results[0]
+        title = first_result.get("title") if isinstance(first_result, dict) else None
+        if not isinstance(title, str) or not title.strip():
+            raise WikiEnrichmentError("Wikipedia returned an invalid article title")
+        return title
 
     def _download_article(self, title: str) -> str:
         response = requests.get(

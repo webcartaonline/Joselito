@@ -71,6 +71,30 @@ def test_fetch_article_wraps_network_errors(mock_get) -> None:
     with pytest.raises(WikiEnrichmentError):
         WikipediaSourceAdapter().fetch_article("python")
 
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        ValueError("invalid JSON"),
+        {"error": {"code": "badrequest"}},
+        {"query": {}},
+        {"query": {"search": [{"snippet": "missing title"}]}},
+        {"query": {"search": [{"title": 42}]}},
+    ],
+)
+@patch(GET)
+def test_fetch_article_wraps_invalid_search_responses(mock_get, payload) -> None:
+    response = make_response()
+    if isinstance(payload, Exception):
+        response.json.side_effect = payload
+    else:
+        response.json.return_value = payload
+    mock_get.return_value = response
+
+    with pytest.raises(WikiEnrichmentError):
+        WikipediaSourceAdapter().fetch_article("python")
+
+
 @patch(GET)
 def test_fetch_article_raises_not_found_on_404(mock_get) -> None:
     """A 404 when downloading the article raises ResourceNotFoundError."""
@@ -93,6 +117,7 @@ def test_fetch_article_raises_not_found_when_page_has_no_content(mock_get) -> No
 
     with pytest.raises(ResourceNotFoundError):
         WikipediaSourceAdapter().fetch_article("python")
+
 
 @patch(GET)
 def test_fetch_article_raises_not_found_when_page_has_no_paragraphs(mock_get) -> None:
