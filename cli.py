@@ -1,5 +1,7 @@
 import pyfiglet
 
+wiki_content = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+
 LINE = "========================================================="
 LINE_ERROR = "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
 
@@ -48,7 +50,16 @@ language = ask_text("¿A qué idioma quieres traducirlo? ")
 print(LINE)
 
 print()
-print(f"Buscando '{topic}' y traduciendo a {language}...")
+
+print(f"# Buscando '{topic}' y traduciendo a {language}...")
+
+print()
+
+print(LINE)
+print(f"# Esto es lo que he encontrado en referencia a {topic}:")
+print()
+
+print(wiki_content)
 print()
 
 print(LINE)
@@ -63,7 +74,7 @@ if export == "Y":
     print(LINE)
 
     print()
-    print(f"Exportando investigación en {export_format}...")
+    print(f"# Exportando investigación en formato {export_format}...")
     print()
 
 print(LINE)
