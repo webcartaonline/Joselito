@@ -1,5 +1,7 @@
+import sys
 import time
-from typing import Optional
+from pathlib import Path
+from typing import Callable, Optional
 
 import pyfiglet
 import typer
@@ -9,24 +11,41 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt
 from rich.table import Table
 
+SOURCE_DIRECTORY = Path(__file__).parent / "src"
+sys.path.insert(0, str(SOURCE_DIRECTORY))
+
+from wiki_enrichment.domain.exceptions import ResourceNotFoundError, WikiEnrichmentError
+from wiki_enrichment.domain.models import ArticleContent
+from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
+
+WIKIPEDIA_LANGUAGE = "es"
+BANNER_FONT = "larry3d"
+PENDING_STEP_SECONDS = 1
+
+TOPIC_QUESTION = "¿Qué tema quieres investigar?"
+LANGUAGE_QUESTION = "¿A qué idioma quieres traducirlo?"
+EXPORT_QUESTION = "¿Quieres exportar la investigación? (Y/N)"
+FORMAT_QUESTION = "¿PDF (P) o TXT (T)?"
+
+YES, NO = "Y", "N"
+EXPORT_FORMATS = {"P": "PDF", "T": "TXT"}
+NOT_EXPORTED = "No"
+
+Step = tuple[str, Optional[Callable[[], object]]]
+
 console = Console()
 app = typer.Typer()
 
-wiki_content = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+
+def show_banner(text: str) -> None:
+    console.print(pyfiglet.figlet_format(text, font=BANNER_FONT), style="bold cyan")
 
 
-def show_banner(text):
-    """Muestra un texto grande y en color."""
-    console.print(pyfiglet.figlet_format(text, font="larry3d"), style="bold cyan")
-
-
-def show_error(message):
-    """Muestra un error en rojo dentro de un recuadro."""
+def show_error(message: str) -> None:
     console.print(Panel(message, border_style="red", title="Error"))
 
 
-def ask_text(question):
-    """Pregunta algo y no acepta respuestas vacías."""
+def ask_text(question: str) -> str:
     while True:
         answer = Prompt.ask(f"[bold]{question}[/]").strip()
         if answer:
@@ -34,21 +53,27 @@ def ask_text(question):
         show_error("No has escrito nada. Inténtalo de nuevo.")
 
 
-def ask_option(question, options):
-    """Pregunta algo y solo acepta las letras de 'options' (da igual mayúscula o minúscula)."""
-    valid = " o ".join(options)
+def ask_option(question: str, options: list[str] | dict[str, str]) -> str:
+    valid_options = " o ".join(options)
     while True:
         answer = Prompt.ask(f"[bold]{question}[/]").strip().upper()
-        if answer == "":
-            show_error(f"No has escrito nada. Escribe {valid}.")
+        if not answer:
+            show_error(f"No has escrito nada. Escribe {valid_options}.")
         elif answer not in options:
-            show_error(f"'{answer}' no es una opción válida. Escribe {valid}.")
+            show_error(f"'{answer}' no es una opción válida. Escribe {valid_options}.")
         else:
             return answer
 
 
-def run_steps(steps):
-    """Muestra una barra de progreso que avanza un paso cada vez."""
+def run_step(action: Optional[Callable[[], object]]) -> object:
+    if action is None:
+        time.sleep(PENDING_STEP_SECONDS)
+        return None
+    return action()
+
+
+def run_steps(steps: list[Step]) -> list[object]:
+    results = []
     with Progress(
         SpinnerColumn(),
         TextColumn("{task.description}"),
@@ -57,14 +82,44 @@ def run_steps(steps):
         console=console,
     ) as progress:
         task = progress.add_task("Empezando...", total=len(steps))
-        for step in steps:
-            progress.update(task, description=step)
-            time.sleep(1)  # Aquí irá la llamada real (Wikipedia, IA, traducción...)
+        for description, action in steps:
+            progress.update(task, description=description)
+            results.append(run_step(action))
             progress.advance(task)
+    return results
 
 
-def show_summary(topic, language, export_format):
-    """Muestra un resumen final en forma de tabla."""
+def research_topic(topic: str, language: str) -> tuple[ArticleContent, str]:
+    wikipedia = WikipediaSourceAdapter(language=WIKIPEDIA_LANGUAGE)
+    while True:
+        try:
+            article, _, _ = run_steps([
+                (f"Buscando '{topic}' en Wikipedia...", lambda: wikipedia.fetch_article(topic)),
+                ("Enriqueciendo con IA...", None),
+                (f"Traduciendo a {language}...", None),
+            ])
+            return article, topic
+        except ResourceNotFoundError:
+            show_error(f"No he encontrado nada sobre '{topic}' en Wikipedia. Prueba con otro tema.")
+            topic = ask_text(TOPIC_QUESTION)
+        except WikiEnrichmentError:
+            show_error("No he podido conectar con Wikipedia. Revisa tu conexión a internet e inténtalo más tarde.")
+            raise typer.Exit(code=1)
+
+
+def show_article(article: ArticleContent) -> None:
+    console.print(Panel(article.full_text, title=f"Resultados sobre {article.title}", border_style="green"))
+
+
+def export_research() -> str:
+    if ask_option(EXPORT_QUESTION, [YES, NO]) == NO:
+        return NOT_EXPORTED
+    export_format = EXPORT_FORMATS[ask_option(FORMAT_QUESTION, EXPORT_FORMATS)]
+    run_steps([(f"Exportando en {export_format}...", None)])
+    return export_format
+
+
+def show_summary(topic: str, language: str, export_format: str) -> None:
     table = Table(title="Resumen")
     table.add_column("Dato", style="cyan")
     table.add_column("Valor", style="green")
@@ -72,6 +127,11 @@ def show_summary(topic, language, export_format):
     table.add_row("Idioma", language)
     table.add_row("Exportado", export_format)
     console.print(table)
+
+
+def say_goodbye() -> None:
+    console.print("[bold]Mi trabajo aquí ha terminado, nos vemos cuando quieras.[/]")
+    show_banner("Ha sido un placer")
 
 
 @app.command()
@@ -83,27 +143,15 @@ def main(
     show_banner("Hola, soy")
     show_banner("Joselito")
 
-    # Si no lo pasaron al arrancar, lo preguntamos
-    topic = tema or ask_text("¿Qué tema quieres investigar?")
-    language = idioma or ask_text("¿A qué idioma quieres traducirlo?")
+    topic = tema or ask_text(TOPIC_QUESTION)
+    language = idioma or ask_text(LANGUAGE_QUESTION)
 
-    run_steps([
-        f"Buscando '{topic}' en Wikipedia...",
-        "Enriqueciendo con IA...",
-        f"Traduciendo a {language}...",
-    ])
-
-    console.print(Panel(wiki_content, title=f"Resultados sobre {topic}", border_style="green"))
-
-    export_format = "No"
-    if ask_option("¿Quieres exportar la investigación? (Y/N)", ["Y", "N"]) == "Y":
-        formats = {"P": "PDF", "T": "TXT"}
-        export_format = formats[ask_option("¿PDF (P) o TXT (T)?", formats)]
-        run_steps([f"Exportando en {export_format}..."])
+    article, topic = research_topic(topic, language)
+    show_article(article)
+    export_format = export_research()
 
     show_summary(topic, language, export_format)
-    console.print("[bold]Mi trabajo aquí ha terminado, nos vemos cuando quieras.[/]")
-    show_banner("Ha sido un placer")
+    say_goodbye()
 
 
 if __name__ == "__main__":
