@@ -45,21 +45,34 @@ def show_error(message: str) -> None:
     console.print(Panel(message, border_style="red", title="Error"))
 
 
+class QuestionPrompt(Prompt):
+    prompt_suffix = " "
+
+
+def prompt_user(question: str) -> str:
+    console.print()
+    console.rule(style="dim")
+    return QuestionPrompt.ask(f"[bold yellow]#[/] [bold yellow]{question}[/]\n  [dim]»[/]")
+
+
 def ask_text(question: str) -> str:
     while True:
-        answer = Prompt.ask(f"[bold]{question}[/]").strip()
+        answer = prompt_user(question).strip()
         if answer:
             return answer
+        print()
         show_error("No has escrito nada. Inténtalo de nuevo.")
 
 
 def ask_option(question: str, options: list[str] | dict[str, str]) -> str:
     valid_options = " o ".join(options)
     while True:
-        answer = Prompt.ask(f"[bold]{question}[/]").strip().upper()
+        answer = prompt_user(question).strip().upper()
         if not answer:
+            print()
             show_error(f"No has escrito nada. Escribe {valid_options}.")
         elif answer not in options:
+            print()
             show_error(f"'{answer}' no es una opción válida. Escribe {valid_options}.")
         else:
             return answer
@@ -70,6 +83,7 @@ def run_step(action: Optional[Callable[[], object]]) -> object:
         time.sleep(PENDING_STEP_SECONDS)
         return None
     return action()
+
 
 
 def run_steps(steps: list[Step]) -> list[object]:
@@ -93,6 +107,7 @@ def research_topic(topic: str, language: str) -> tuple[ArticleContent, str]:
     wikipedia = WikipediaSourceAdapter(language=WIKIPEDIA_LANGUAGE)
     while True:
         try:
+            print()
             article, _, _ = run_steps([
                 (f"Buscando '{topic}' en Wikipedia...", lambda: wikipedia.fetch_article(topic)),
                 ("Enriqueciendo con IA...", None),
@@ -100,14 +115,17 @@ def research_topic(topic: str, language: str) -> tuple[ArticleContent, str]:
             ])
             return article, topic
         except ResourceNotFoundError:
+            print()
             show_error(f"No he encontrado nada sobre '{topic}' en Wikipedia. Prueba con otro tema.")
             topic = ask_text(TOPIC_QUESTION)
         except WikiEnrichmentError:
+            print()
             show_error("No he podido conectar con Wikipedia. Revisa tu conexión a internet e inténtalo más tarde.")
             raise typer.Exit(code=1)
 
 
 def show_article(article: ArticleContent) -> None:
+    print()
     console.print(Panel(article.full_text, title=f"Resultados sobre {article.title}", border_style="green"))
 
 
@@ -115,11 +133,13 @@ def export_research() -> str:
     if ask_option(EXPORT_QUESTION, [YES, NO]) == NO:
         return NOT_EXPORTED
     export_format = EXPORT_FORMATS[ask_option(FORMAT_QUESTION, EXPORT_FORMATS)]
+    print()
     run_steps([(f"Exportando en {export_format}...", None)])
     return export_format
 
 
 def show_summary(topic: str, language: str, export_format: str) -> None:
+    print()
     table = Table(title="Resumen")
     table.add_column("Dato", style="cyan")
     table.add_column("Valor", style="green")
@@ -127,10 +147,13 @@ def show_summary(topic: str, language: str, export_format: str) -> None:
     table.add_row("Idioma", language)
     table.add_row("Exportado", export_format)
     console.print(table)
+    print()
 
 
 def say_goodbye() -> None:
+    print("=========================================================")
     console.print("[bold]Mi trabajo aquí ha terminado, nos vemos cuando quieras.[/]")
+    print("=========================================================")
     show_banner("Ha sido un placer")
 
 
