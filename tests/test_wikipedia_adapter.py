@@ -70,3 +70,37 @@ def test_fetch_article_wraps_network_errors(mock_get) -> None:
 
     with pytest.raises(WikiEnrichmentError):
         WikipediaSourceAdapter().fetch_article("python")
+
+@patch(GET)
+def test_fetch_article_raises_not_found_on_404(mock_get) -> None:
+    """A 404 when downloading the article raises ResourceNotFoundError."""
+    mock_get.side_effect = [
+        make_response(json_data=SEARCH_OK),
+        make_response(status_code=404),
+    ]
+
+    with pytest.raises(ResourceNotFoundError):
+        WikipediaSourceAdapter().fetch_article("python")
+
+
+@patch(GET)
+def test_fetch_article_raises_not_found_when_page_has_no_content(mock_get) -> None:
+    """A page without the content container raises ResourceNotFoundError."""
+    mock_get.side_effect = [
+        make_response(json_data=SEARCH_OK),
+        make_response(text="<html><body></body></html>"),
+    ]
+
+    with pytest.raises(ResourceNotFoundError):
+        WikipediaSourceAdapter().fetch_article("python")
+
+@patch(GET)
+def test_fetch_article_raises_not_found_when_page_has_no_paragraphs(mock_get) -> None:
+    """A content container with only empty paragraphs raises ResourceNotFoundError."""
+    mock_get.side_effect = [
+        make_response(json_data=SEARCH_OK),
+        make_response(text='<div id="mw-content-text"><p>  </p></div>'),
+    ]
+
+    with pytest.raises(ResourceNotFoundError):
+        WikipediaSourceAdapter().fetch_article("python")
