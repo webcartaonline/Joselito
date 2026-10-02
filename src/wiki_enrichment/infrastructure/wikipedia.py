@@ -1,4 +1,3 @@
-"""Wikipedia source adapter: searches a topic and scrapes the article."""
 
 import requests
 from bs4 import BeautifulSoup
@@ -16,13 +15,13 @@ HEADERS = {"User-Agent": "WikiEnrichmentBot/1.0 (bootcamp project)"}
 
 
 class WikipediaSourceAdapter:
-    """Fetches the title and first paragraphs of a Wikipedia article."""
+
 
     def __init__(self, language: str = "en") -> None:
         self._base_url = f"https://{language}.wikipedia.org"
 
     def fetch_article(self, topic: str) -> ArticleContent:
-        """Search the topic on Wikipedia and return its scraped content."""
+
         try:
             title = self._search_title(topic)
             html = self._download_article(title)
