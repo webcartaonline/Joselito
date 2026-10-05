@@ -37,6 +37,7 @@ class WikipediaSourceAdapter:
         return ArticleContent(title=title, paragraphs=paragraphs)
 
     def _search_title(self, topic: str) -> str:
+        """Search Wikipedia and return the first matching article title."""
         response = requests.get(
             f"{self._base_url}/w/api.php",
             params={
@@ -50,10 +51,28 @@ class WikipediaSourceAdapter:
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
-        results = response.json()["query"]["search"]
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise WikiEnrichmentError("Invalid Wikipedia response") from exc
+        return self._parse_search_title(payload, topic)
+
+    @staticmethod
+    def _parse_search_title(payload: object, topic: str) -> str:
+        """Extract the first article title from a search payload."""
+        try:
+            results = payload["query"]["search"]  # type: ignore[index]
+        except (KeyError, TypeError) as exc:
+            raise WikiEnrichmentError("Invalid Wikipedia response") from exc
         if not results:
             raise ResourceNotFoundError(f"No Wikipedia results for '{topic}'")
-        return results[0]["title"]
+        try:
+            title = results[0]["title"]
+        except (KeyError, TypeError, IndexError) as exc:
+            raise WikiEnrichmentError("Invalid Wikipedia response") from exc
+        if not title:
+            raise WikiEnrichmentError("Invalid Wikipedia response")
+        return title
 
     def _download_article(self, title: str) -> str:
         response = requests.get(
