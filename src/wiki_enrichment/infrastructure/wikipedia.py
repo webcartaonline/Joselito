@@ -1,4 +1,6 @@
 
+from urllib.parse import quote
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -70,13 +72,14 @@ class WikipediaSourceAdapter:
             title = results[0]["title"]
         except (KeyError, TypeError, IndexError) as exc:
             raise WikiEnrichmentError("Invalid Wikipedia response") from exc
-        if not title:
+        if not isinstance(title, str) or not title:
             raise WikiEnrichmentError("Invalid Wikipedia response")
         return title
 
     def _download_article(self, title: str) -> str:
+        slug = quote(title.replace(" ", "_"), safe="()")
         response = requests.get(
-            f"{self._base_url}/wiki/{title.replace(' ', '_')}",
+            f"{self._base_url}/wiki/{slug}",
             headers=HEADERS,
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
