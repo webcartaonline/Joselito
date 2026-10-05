@@ -3,3 +3,6 @@ beautifulsoup4==4.15.0
 pytest==9.1.1
 pytest_bdd==9.0.0
 pytest-cov==7.1.0
+typer==0.27.2
+rich==15.0.0
+pyfiglet==1.0.4
