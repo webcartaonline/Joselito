@@ -2,3 +2,4 @@ requests==2.34.2
 beautifulsoup4==4.15.0
 pytest==9.1.1
 pytest_bdd==9.0.0
+pytest-cov==7.1.0
