@@ -1,6 +1,13 @@
+"""Integration tests for the orchestrator with a mocked Wikipedia adapter."""
 
-from unittest.mock import MagicMock, create_autospec, patch
+from unittest.mock import create_autospec, patch
 
+from tests.helpers.wikipedia_mocks import (
+    REQUEST_TARGET,
+    build_article_html,
+    make_article_response,
+    make_search_response,
+)
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.domain.models import EnrichedContent
 from wiki_enrichment.domain.ports import (
@@ -10,24 +17,13 @@ from wiki_enrichment.domain.ports import (
 )
 from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
 
-GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
 
-
-def make_response(json_data=None, text=""):
-    response = MagicMock()
-    response.json.return_value = json_data
-    response.text = text
-    response.status_code = 200
-    response.raise_for_status.return_value = None
-    return response
-
-
-@patch(GET)
+@patch(REQUEST_TARGET)
 def test_orchestrator_runs_with_real_wikipedia_adapter(mock_get) -> None:
-
+    """Run the pipeline with a real adapter and mocked HTTP responses."""
     mock_get.side_effect = [
-        make_response(json_data={"query": {"search": [{"title": "Python"}]}}),
-        make_response(text='<div id="mw-content-text"><p>A language.</p></div>'),
+        make_search_response("Python"),
+        make_article_response(build_article_html(["A language."])),
     ]
     enricher = create_autospec(ContentEnricher, instance=True)
     enricher.enrich.side_effect = lambda article: EnrichedContent(article, "Summary")
