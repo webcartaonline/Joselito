@@ -1,6 +1,4 @@
-import sys
 import time
-from pathlib import Path
 from typing import Callable, Optional
 
 import pyfiglet
@@ -11,12 +9,10 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt
 from rich.table import Table
 
-SOURCE_DIRECTORY = Path(__file__).parent / "src"
-sys.path.insert(0, str(SOURCE_DIRECTORY))
-
+from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
+from wiki_enrichment.bootstrap import build_orchestrator
 from wiki_enrichment.domain.exceptions import ResourceNotFoundError, WikiEnrichmentError
 from wiki_enrichment.domain.models import ArticleContent
-from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
 
 WIKIPEDIA_LANGUAGE = "es"
 BANNER_FONT = "larry3d"
@@ -103,13 +99,14 @@ def run_steps(steps: list[Step]) -> list[object]:
     return results
 
 
-def research_topic(topic: str, language: str) -> tuple[ArticleContent, str]:
-    wikipedia = WikipediaSourceAdapter(language=WIKIPEDIA_LANGUAGE)
+def research_topic(
+    orchestrator: WikiEnrichmentOrchestrator, topic: str, language: str
+) -> tuple[ArticleContent, str]:
     while True:
         try:
             print()
             article, _, _ = run_steps([
-                (f"Buscando '{topic}' en Wikipedia...", lambda: wikipedia.fetch_article(topic)),
+                (f"Buscando '{topic}' en Wikipedia...", lambda: orchestrator.fetch_article(topic)),
                 ("Enriqueciendo con IA...", None),
                 (f"Traduciendo a {language}...", None),
             ])
@@ -169,7 +166,8 @@ def main(
     topic = tema or ask_text(TOPIC_QUESTION)
     language = idioma or ask_text(LANGUAGE_QUESTION)
 
-    article, topic = research_topic(topic, language)
+    orchestrator = build_orchestrator(wikipedia_language=WIKIPEDIA_LANGUAGE)
+    article, topic = research_topic(orchestrator, topic, language)
     show_article(article)
     export_format = export_research()
 

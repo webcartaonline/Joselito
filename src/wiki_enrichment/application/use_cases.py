@@ -1,6 +1,6 @@
 """Application use cases composed exclusively from domain ports."""
 
-from wiki_enrichment.domain.models import EnrichedContent
+from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
 from wiki_enrichment.domain.ports import (
     ContentEnricher,
     DocumentExporter,
@@ -25,6 +25,15 @@ class WikiEnrichmentOrchestrator:
         self._content_enricher = content_enricher
         self._translator = translator
         self._document_exporter = document_exporter
+
+    def fetch_article(self, topic: str) -> ArticleContent:
+        """Retrieve the source article for a topic without further processing.
+
+        Lets the presentation layer show the article while the remaining
+        stages (enrichment, translation, and export) are still in progress.
+        """
+
+        return self._wikipedia_source.fetch_article(topic)
 
     def execute(
         self, topic: str, target_lang: str, export_path: str

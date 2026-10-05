@@ -12,9 +12,11 @@ clients, AI SDKs, translation libraries, and document-generation libraries.
   all collaborators through its constructor and imports no concrete adapters.
 - **Infrastructure** contains provider-specific adapter implementations. The
   current classes are placeholders that deliberately perform no I/O.
-- **Presentation** is the future CLI or other user-facing entry point. It is
-  responsible for assembling concrete adapters and injecting them into the
-  application use case.
+- **Presentation** is the CLI (`cli.py`) or any other user-facing entry point.
+  It obtains a fully wired orchestrator from
+  `wiki_enrichment.bootstrap.build_orchestrator`, which is the only module that
+  instantiates concrete adapters, and talks exclusively to the application
+  layer.
 
 ## Dependency direction
 
@@ -32,6 +34,10 @@ The application orchestrator follows this sequence:
 
 `export_path` is treated as a base path; the orchestrator requests
 `<export_path>.txt` and `<export_path>.pdf`.
+
+`fetch_article(topic)` exposes only the first step, so the CLI can show the
+article while the enrichment, translation, and export stages are still in
+progress.
 
 ## Flow
 
