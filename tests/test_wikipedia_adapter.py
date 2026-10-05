@@ -143,6 +143,36 @@ def test_fetch_article_raises_domain_error_on_empty_title(mock_get) -> None:
 
 
 @patch(REQUEST_TARGET)
+def test_fetch_article_raises_domain_error_on_non_string_title(
+    mock_get,
+) -> None:
+    """Map non-string search titles to the base domain error."""
+    mock_get.return_value = make_response(
+        json_data={"query": {"search": [{"title": 123}]}}
+    )
+
+    with pytest.raises(WikiEnrichmentError):
+        WikipediaSourceAdapter().fetch_article("python")
+
+
+@patch(REQUEST_TARGET)
+def test_fetch_article_encodes_special_characters_in_download_url(
+    mock_get,
+) -> None:
+    """Percent-encode special characters in the article download URL."""
+    mock_get.side_effect = [
+        make_search_response("C#"),
+        make_article_response(build_article_html(["A language."])),
+    ]
+
+    article = WikipediaSourceAdapter().fetch_article("c sharp")
+
+    assert article.title == "C#"
+    download_url = mock_get.call_args_list[1].args[0]
+    assert download_url.endswith("/wiki/C%23")
+
+
+@patch(REQUEST_TARGET)
 def test_fetch_article_raises_not_found_on_404(mock_get) -> None:
     """Raise not found when the article page returns 404."""
     mock_get.side_effect = [
