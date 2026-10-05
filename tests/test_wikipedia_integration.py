@@ -1,4 +1,3 @@
-"""Integration test: Wikipedia adapter running inside the orchestrator."""
 
 from unittest.mock import MagicMock, create_autospec, patch
 
@@ -25,7 +24,7 @@ def make_response(json_data=None, text=""):
 
 @patch(GET)
 def test_orchestrator_runs_with_real_wikipedia_adapter(mock_get) -> None:
-    """The scraped article flows through the full pipeline."""
+
     mock_get.side_effect = [
         make_response(json_data={"query": {"search": [{"title": "Python"}]}}),
         make_response(text='<div id="mw-content-text"><p>A language.</p></div>'),
