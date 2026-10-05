@@ -1,10 +1,17 @@
-"""Shared pytest fixtures for Wikipedia HTTP mocking."""
+"""Shared pytest fixtures for contract-level test doubles."""
 
 from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.helpers.content_mocks import default_article, default_enriched
+from tests.helpers.fake_adapters import (
+    FakeContentEnricher,
+    FakeDocumentExporter,
+    FakeTranslator,
+    FakeWikipediaSource,
+)
 from tests.helpers.wikipedia_mocks import (
     DEFAULT_SEARCH_TITLE,
     REQUEST_TARGET,
@@ -12,6 +19,7 @@ from tests.helpers.wikipedia_mocks import (
     build_search_payload,
     default_article_html,
 )
+from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
 
 
 @pytest.fixture
@@ -49,3 +57,39 @@ def mock_http_get() -> Iterator[MagicMock]:
     """
     with patch(REQUEST_TARGET) as mocked_get:
         yield mocked_get
+
+
+@pytest.fixture
+def sample_article() -> ArticleContent:
+    """Return the default contract test article."""
+    return default_article()
+
+
+@pytest.fixture
+def sample_enriched() -> EnrichedContent:
+    """Return the default contract enriched content."""
+    return default_enriched()
+
+
+@pytest.fixture
+def fake_source(sample_article: ArticleContent) -> FakeWikipediaSource:
+    """Return a fake source serving the sample article."""
+    return FakeWikipediaSource(article=sample_article)
+
+
+@pytest.fixture
+def fake_enricher() -> FakeContentEnricher:
+    """Return a fake enricher with the default summary."""
+    return FakeContentEnricher()
+
+
+@pytest.fixture
+def fake_translator() -> FakeTranslator:
+    """Return a fake translator without external calls."""
+    return FakeTranslator()
+
+
+@pytest.fixture
+def fake_exporter() -> FakeDocumentExporter:
+    """Return a fake exporter recording without filesystem writes."""
+    return FakeDocumentExporter()
