@@ -2,8 +2,8 @@
 
 from unittest.mock import create_autospec
 
+from tests.helpers.content_mocks import make_article, make_enriched
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
 from wiki_enrichment.domain.ports import (
     ContentEnricher,
     DocumentExporter,
@@ -15,8 +15,8 @@ from wiki_enrichment.domain.ports import (
 def test_execute_orchestrates_the_full_pipeline() -> None:
     """The use case coordinates ports without invoking real integrations."""
 
-    article = ArticleContent("Python", ["A programming language."])
-    enriched = EnrichedContent(article, "A concise summary.")
+    article = make_article(title="Python", paragraphs=["A programming language."])
+    enriched = make_enriched(article, "A concise summary.")
     source = create_autospec(WikipediaSource, instance=True)
     enricher = create_autospec(ContentEnricher, instance=True)
     translator = create_autospec(Translator, instance=True)
@@ -31,7 +31,7 @@ def test_execute_orchestrates_the_full_pipeline() -> None:
 
     result = orchestrator.execute("Python", "fr", "output/article")
 
-    expected = EnrichedContent(article, "A concise summary.", "Un résumé concis.")
+    expected = make_enriched(article, "A concise summary.", "Un résumé concis.")
     assert result == expected
     source.fetch_article.assert_called_once_with("Python")
     enricher.enrich.assert_called_once_with(article)
@@ -43,7 +43,7 @@ def test_execute_orchestrates_the_full_pipeline() -> None:
 def test_fetch_article_only_queries_the_wikipedia_source() -> None:
     """Fetching an article does not trigger enrichment, translation, or export."""
 
-    article = ArticleContent("Python", ["A programming language."])
+    article = make_article(title="Python", paragraphs=["A programming language."])
     source = create_autospec(WikipediaSource, instance=True)
     enricher = create_autospec(ContentEnricher, instance=True)
     translator = create_autospec(Translator, instance=True)
