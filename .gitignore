@@ -9,6 +9,8 @@ __pycache__/
 venv/
 env/
 ENV/
+# Environment variables (secrets)
+.env
 
 # Environment variables and local configuration
 .env
