@@ -12,3 +12,6 @@ class ResourceNotFoundError(WikiEnrichmentError):
 class ProviderTimeoutError(WikiEnrichmentError):
     """Raised when an external provider exceeds its configured timeout."""
 
+
+class EnrichmentError(WikiEnrichmentError):
+    """Raised when the AI provider fails to generate an enrichment."""
