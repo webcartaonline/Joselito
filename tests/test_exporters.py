@@ -5,6 +5,7 @@ from fpdf.errors import FPDFException
 from pypdf import PdfReader
 
 from tests.helpers.content_mocks import make_article, make_enriched
+from tests.helpers.document_readers import read_pdf
 from wiki_enrichment.domain.exceptions import ExportError
 from wiki_enrichment.infrastructure import exporters
 from wiki_enrichment.infrastructure.exporters import (
@@ -24,11 +25,6 @@ def read(path) -> str:
     return path.read_text(encoding=TEXT_ENCODING)
 
 
-def read_pdf(path) -> tuple[str, int]:
-    """Open the PDF like a viewer would and return its text and page count."""
-    reader = PdfReader(path)
-    text = "\n".join(page.extract_text() for page in reader.pages)
-    return " ".join(text.split()), len(reader.pages)
 
 
 def test_export_txt_saves_title_and_the_three_contents(tmp_path) -> None:

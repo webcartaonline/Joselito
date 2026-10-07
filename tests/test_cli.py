@@ -9,6 +9,12 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 import cli
+from tests.helpers.document_readers import read_document
+from tests.helpers.fake_adapters import (
+    FakeContentEnricher,
+    FakeTranslator,
+    FakeWikipediaSource,
+)
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.domain.exceptions import (
     ExportError,
@@ -17,6 +23,7 @@ from wiki_enrichment.domain.exceptions import (
     WikiEnrichmentError,
 )
 from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from wiki_enrichment.infrastructure.exporters import EMPTY_SECTION_TEXT, DocumentExporterAdapter
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
 CONTENT = EnrichedContent(original_article=ARTICLE, ai_summary="", translated_summary="")
@@ -248,3 +255,26 @@ def test_full_flow_with_real_adapters_searches_spanish_wikipedia(summary) -> Non
     assert "Un lenguaje." in result.output
     assert mock_get.call_args_list[0].args[0].startswith("https://es.wikipedia.org")
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
+
+
+@pytest.mark.parametrize(("answer", "file_name"), [("T", "apuntes.txt"), ("P", "apuntes.pdf")])
+def test_full_flow_creates_a_real_file_with_simulated_data(
+    tmp_path, monkeypatch, answer, file_name
+) -> None:
+    """From the questions to the saved file, with fakes instead of real services."""
+    orchestrator = WikiEnrichmentOrchestrator(
+        FakeWikipediaSource(article=ARTICLE),
+        FakeContentEnricher(),
+        FakeTranslator(),
+        DocumentExporterAdapter(),
+    )
+    monkeypatch.setattr(cli, "EXPORT_FOLDER", str(tmp_path))
+
+    with patch("cli.build_orchestrator", return_value=orchestrator):
+        result = run_cli(OPTIONS, f"Y\n{answer}\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    text = read_document(tmp_path / file_name)
+    assert "Python" in text
+    assert "A programming language." in text
+    assert text.count(EMPTY_SECTION_TEXT) == 2
