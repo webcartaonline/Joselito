@@ -87,7 +87,7 @@ def test_options_skip_the_topic_and_language_questions(orchestrator, summary) ->
     assert cli.TOPIC_QUESTION not in result.output
     assert cli.LANGUAGE_QUESTION not in result.output
     orchestrator.fetch_article.assert_called_once_with("Python")
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
 def test_missing_options_are_asked_interactively(orchestrator, summary) -> None:
@@ -97,7 +97,7 @@ def test_missing_options_are_asked_interactively(orchestrator, summary) -> None:
     assert cli.TOPIC_QUESTION in result.output
     assert cli.LANGUAGE_QUESTION in result.output
     orchestrator.fetch_article.assert_called_once_with("Python")
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
 def test_successful_run_shows_article_summary_and_goodbye(orchestrator) -> None:
@@ -122,7 +122,7 @@ def test_empty_language_is_asked_again(orchestrator, summary) -> None:
 
     assert result.exit_code == 0, result.output
     assert EMPTY_TEXT_ERROR in result.output
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
 def test_empty_or_invalid_export_answers_are_asked_again(orchestrator, summary) -> None:
@@ -131,17 +131,59 @@ def test_empty_or_invalid_export_answers_are_asked_again(orchestrator, summary) 
     assert result.exit_code == 0, result.output
     assert "No has escrito nada. Escribe Y o N." in result.output
     assert "'X' no es una opción válida. Escribe Y o N." in result.output
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
-@pytest.mark.parametrize(("answer", "export_format"), [("P", "PDF"), ("t", "TXT")])
-def test_chosen_export_format_reaches_the_summary(
-    orchestrator, summary, answer, export_format
+@pytest.mark.parametrize(
+    ("answers", "export_format", "file_name"),
+    [
+        ("P\napuntes", "PDF", "apuntes.pdf"),
+        ("t\nmis apuntes", "TXT", "mis apuntes.txt"),
+        ("P\nresumen.PDF", "PDF", "resumen.pdf"),
+        ("T\nnotas.pdf", "TXT", "notas.pdf.txt"),
+    ],
+)
+def test_chosen_format_and_file_name_reach_the_summary(
+    orchestrator, summary, answers, export_format, file_name
 ) -> None:
-    result = run_cli(OPTIONS, f"Y\n{answer}\n")
+    result = run_cli(OPTIONS, f"Y\n{answers}\n")
 
     assert result.exit_code == 0, result.output
-    summary.assert_called_once_with("Python", "inglés", export_format)
+    assert cli.FILE_NAME_QUESTION in result.output
+    summary.assert_called_once_with("Python", "inglés", export_format, file_name)
+
+
+def test_no_export_does_not_ask_for_a_file_name(orchestrator, summary) -> None:
+    result = run_cli(OPTIONS, "N\n")
+
+    assert result.exit_code == 0, result.output
+    assert cli.FILE_NAME_QUESTION not in result.output
+
+
+def test_invalid_file_names_are_asked_again(orchestrator, summary) -> None:
+    result = run_cli(OPTIONS, "Y\nP\n\nnotas?\ncon\nnotas.\nnotas\n")
+
+    assert result.exit_code == 0, result.output
+    assert EMPTY_TEXT_ERROR in result.output
+    assert "no puede llevar estos símbolos: ?" in result.output
+    assert "'con' es un nombre reservado" in result.output
+    assert "no puede terminar en punto" in result.output
+    summary.assert_called_once_with("Python", "inglés", "PDF", "notas.pdf")
+
+
+@pytest.mark.parametrize(
+    "name", ["", "a/b", "a\\b", "a:b", "a*b", "a?b", 'a"b', "a<b", "a>b", "a|b",
+             "fin.", "CON", "nul", "COM1", "lpt9", "x" * 101],
+)
+def test_file_name_error_rejects_invalid_names(name) -> None:
+    assert cli.file_name_error(name) is not None
+
+
+@pytest.mark.parametrize(
+    "name", ["apuntes", "mis apuntes", "Tema_1-final", "versión.2", "x" * 100, "CONSOLA"],
+)
+def test_file_name_error_accepts_valid_names(name) -> None:
+    assert cli.file_name_error(name) is None
 
 
 def test_unknown_topic_asks_for_a_new_one(orchestrator, summary) -> None:
@@ -153,7 +195,7 @@ def test_unknown_topic_asks_for_a_new_one(orchestrator, summary) -> None:
     assert "No he encontrado nada sobre 'zzzxxyy' en Wikipedia" in result.output
     calls = [call.args for call in orchestrator.fetch_article.call_args_list]
     assert calls == [("zzzxxyy",), ("Python",)]
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
 @pytest.mark.parametrize(
@@ -191,4 +233,4 @@ def test_full_flow_with_real_adapters_searches_spanish_wikipedia(summary) -> Non
     assert result.exit_code == 0, result.output
     assert "Un lenguaje." in result.output
     assert mock_get.call_args_list[0].args[0].startswith("https://es.wikipedia.org")
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)

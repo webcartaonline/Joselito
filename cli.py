@@ -22,10 +22,19 @@ TOPIC_QUESTION = "¿Qué tema quieres investigar?"
 LANGUAGE_QUESTION = "¿A qué idioma quieres traducirlo?"
 EXPORT_QUESTION = "¿Quieres exportar la investigación? (Y/N)"
 FORMAT_QUESTION = "¿PDF (P) o TXT (T)?"
+FILE_NAME_QUESTION = "¿Con qué nombre quieres guardar el archivo?"
 
 YES, NO = "Y", "N"
 EXPORT_FORMATS = {"P": "PDF", "T": "TXT"}
+EXTENSIONS = {"PDF": ".pdf", "TXT": ".txt"}
 NOT_EXPORTED = "No"
+NO_FILE = "-"
+
+FORBIDDEN_CHARACTERS = '\\/:*?"<>|'
+RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL"} | {
+    f"{device}{number}" for device in ("COM", "LPT") for number in range(1, 10)
+}
+MAX_FILE_NAME_LENGTH = 100
 
 Step = tuple[str, Optional[Callable[[], object]]]
 
@@ -121,21 +130,55 @@ def research_topic(
             raise typer.Exit(code=1)
 
 
+def file_name_error(name: str) -> Optional[str]:
+    """Return why a file name is not valid, or None if it can be used."""
+    if not name:
+        return "No has escrito nada. Inténtalo de nuevo."
+    forbidden = sorted({char for char in name if char in FORBIDDEN_CHARACTERS})
+    if forbidden:
+        return f"El nombre no puede llevar estos símbolos: {' '.join(forbidden)}"
+    if name.endswith("."):
+        return "El nombre no puede terminar en punto."
+    if name.upper() in RESERVED_NAMES:
+        return f"'{name}' es un nombre reservado por el sistema. Elige otro."
+    if len(name) > MAX_FILE_NAME_LENGTH:
+        return f"El nombre es demasiado largo (máximo {MAX_FILE_NAME_LENGTH} caracteres)."
+    return None
+
+
+def remove_extension(name: str, extension: str) -> str:
+    if name.lower().endswith(extension):
+        return name[: -len(extension)].strip()
+    return name
+
+
+def ask_file_name(export_format: str) -> str:
+    extension = EXTENSIONS[export_format]
+    while True:
+        name = remove_extension(prompt_user(FILE_NAME_QUESTION).strip(), extension)
+        error = file_name_error(name)
+        if error is None:
+            return f"{name}{extension}"
+        print()
+        show_error(error)
+
+
 def show_article(article: ArticleContent) -> None:
     print()
     console.print(Panel(article.full_text, title=f"Resultados sobre {article.title}", border_style="green"))
 
 
-def export_research() -> str:
+def export_research() -> tuple[str, str]:
     if ask_option(EXPORT_QUESTION, [YES, NO]) == NO:
-        return NOT_EXPORTED
+        return NOT_EXPORTED, NO_FILE
     export_format = EXPORT_FORMATS[ask_option(FORMAT_QUESTION, EXPORT_FORMATS)]
+    file_name = ask_file_name(export_format)
     print()
-    run_steps([(f"Exportando en {export_format}...", None)])
-    return export_format
+    run_steps([(f"Exportando {file_name}...", None)])
+    return export_format, file_name
 
 
-def show_summary(topic: str, language: str, export_format: str) -> None:
+def show_summary(topic: str, language: str, export_format: str, file_name: str) -> None:
     print()
     table = Table(title="Resumen")
     table.add_column("Dato", style="cyan")
@@ -143,6 +186,7 @@ def show_summary(topic: str, language: str, export_format: str) -> None:
     table.add_row("Tema", topic)
     table.add_row("Idioma", language)
     table.add_row("Exportado", export_format)
+    table.add_row("Archivo", file_name)
     console.print(table)
     print()
 
@@ -169,9 +213,9 @@ def main(
     orchestrator = build_orchestrator(wikipedia_language=WIKIPEDIA_LANGUAGE)
     article, topic = research_topic(orchestrator, topic, language)
     show_article(article)
-    export_format = export_research()
+    export_format, file_name = export_research()
 
-    show_summary(topic, language, export_format)
+    show_summary(topic, language, export_format, file_name)
     say_goodbye()
 
 
