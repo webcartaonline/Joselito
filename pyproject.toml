@@ -10,6 +10,8 @@ dependencies = [
     "requests==2.34.2",
     "beautifulsoup4==4.15.0",
     "fpdf2==2.8.9",
+    "huggingface_hub==2.1.1",
+    "python_dotenv==1.2.4",
 ]
 
 [project.optional-dependencies]

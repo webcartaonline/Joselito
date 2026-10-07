@@ -13,6 +13,9 @@ class ProviderTimeoutError(WikiEnrichmentError):
     """Raised when an external provider exceeds its configured timeout."""
 
 
+class EnrichmentError(WikiEnrichmentError):
+    """Raised when the AI provider fails to generate an enrichment."""
+
+
 class ExportError(WikiEnrichmentError):
     """Raised when a document cannot be saved."""
-
