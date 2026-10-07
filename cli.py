@@ -26,6 +26,11 @@ FILE_NAME_QUESTION = "¿Con qué nombre quieres guardar el archivo?"
 
 YES, NO = "Y", "N"
 EXPORT_FORMATS = {"P": "PDF", "T": "TXT"}
+ENRICH_ERROR = (
+    "No he podido enriquecer el texto con IA. Revisa que tienes HF_TOKEN en el archivo "
+    ".env, que tu cuenta de Hugging Face tiene créditos y que hay conexión a internet. "
+    "El documento se guardará sin el texto enriquecido."
+)
 EXTENSIONS = {"PDF": ".pdf", "TXT": ".txt"}
 EXPORT_FOLDER = "output"
 NOT_EXPORTED = "No"
@@ -110,15 +115,13 @@ def run_steps(steps: list[Step]) -> list[object]:
 
 
 def research_topic(
-    orchestrator: WikiEnrichmentOrchestrator, topic: str, language: str
+    orchestrator: WikiEnrichmentOrchestrator, topic: str
 ) -> tuple[ArticleContent, str]:
     while True:
         try:
             print()
-            article, _, _ = run_steps([
+            [article] = run_steps([
                 (f"Buscando '{topic}' en Wikipedia...", lambda: orchestrator.fetch_article(topic)),
-                ("Enriqueciendo con IA...", None),
-                (f"Traduciendo a {language}...", None),
             ])
             return article, topic
         except ResourceNotFoundError:
@@ -169,12 +172,44 @@ def show_article(article: ArticleContent) -> None:
     console.print(Panel(article.full_text, title=f"Resultados sobre {article.title}", border_style="green"))
 
 
-def build_content(article: ArticleContent) -> EnrichedContent:
-    """Group the contents to export.
+def enrich_article(orchestrator: WikiEnrichmentOrchestrator, article: ArticleContent) -> str:
+    """Return the AI-enriched text, or an empty text if the AI is not available."""
+    try:
+        print()
+        [enriched] = run_steps([
+            ("Enriqueciendo con IA...", lambda: orchestrator.enrich_article(article)),
+        ])
+        return enriched.ai_summary
+    except WikiEnrichmentError:
+        print()
+        show_error(ENRICH_ERROR)
+        return ""
 
-    TODO: fill ai_summary and translated_summary once AI and translation exist.
+
+def show_enriched(ai_summary: str) -> None:
+    print()
+    console.print(Panel(ai_summary, title="Texto enriquecido con IA", border_style="magenta"))
+
+
+def translate_text(language: str) -> str:
+    """Return the translated text.
+
+    TODO: call the orchestrator once the translation adapter exists.
     """
-    return EnrichedContent(original_article=article, ai_summary="", translated_summary="")
+    print()
+    run_steps([(f"Traduciendo a {language}...", None)])
+    return ""
+
+
+def build_content(
+    article: ArticleContent, ai_summary: str, translated_summary: str
+) -> EnrichedContent:
+    """Group the original, enriched and translated contents to export."""
+    return EnrichedContent(
+        original_article=article,
+        ai_summary=ai_summary,
+        translated_summary=translated_summary,
+    )
 
 
 def export_research(
@@ -231,9 +266,14 @@ def main(
     language = idioma or ask_text(LANGUAGE_QUESTION)
 
     orchestrator = build_orchestrator(wikipedia_language=WIKIPEDIA_LANGUAGE)
-    article, topic = research_topic(orchestrator, topic, language)
+    article, topic = research_topic(orchestrator, topic)
     show_article(article)
-    export_format, file_name = export_research(orchestrator, build_content(article))
+    ai_summary = enrich_article(orchestrator, article)
+    if ai_summary:
+        show_enriched(ai_summary)
+    translated_summary = translate_text(language)
+    content = build_content(article, ai_summary, translated_summary)
+    export_format, file_name = export_research(orchestrator, content)
 
     show_summary(topic, language, export_format, file_name)
     say_goodbye()

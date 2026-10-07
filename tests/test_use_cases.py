@@ -112,3 +112,23 @@ def test_export_document_rejects_unknown_formats() -> None:
 
     exporter.export_txt.assert_not_called()
     exporter.export_pdf.assert_not_called()
+
+
+def test_enrich_article_only_calls_the_enricher() -> None:
+    """Enriching an article does not fetch, translate or export anything."""
+
+    article = make_article()
+    enriched = make_enriched(article, "A concise summary.")
+    source = create_autospec(WikipediaSource, instance=True)
+    enricher = create_autospec(ContentEnricher, instance=True)
+    translator = create_autospec(Translator, instance=True)
+    exporter = create_autospec(DocumentExporter, instance=True)
+    enricher.enrich.return_value = enriched
+    orchestrator = WikiEnrichmentOrchestrator(source, enricher, translator, exporter)
+
+    assert orchestrator.enrich_article(article) == enriched
+    enricher.enrich.assert_called_once_with(article)
+    source.fetch_article.assert_not_called()
+    translator.translate.assert_not_called()
+    exporter.export_txt.assert_not_called()
+    exporter.export_pdf.assert_not_called()

@@ -35,6 +35,11 @@ class WikiEnrichmentOrchestrator:
 
         return self._wikipedia_source.fetch_article(topic)
 
+    def enrich_article(self, article: ArticleContent) -> EnrichedContent:
+        """Enrich an already fetched article without translating or exporting it."""
+
+        return self._content_enricher.enrich(article)
+
     def export_document(
         self, content: EnrichedContent, export_format: str, path: str
     ) -> None:

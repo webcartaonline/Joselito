@@ -17,6 +17,7 @@ from tests.helpers.fake_adapters import (
 )
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.domain.exceptions import (
+    EnrichmentError,
     ExportError,
     ProviderTimeoutError,
     ResourceNotFoundError,
@@ -26,7 +27,9 @@ from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
 from wiki_enrichment.infrastructure.exporters import EMPTY_SECTION_TEXT, DocumentExporterAdapter
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
-CONTENT = EnrichedContent(original_article=ARTICLE, ai_summary="", translated_summary="")
+AI_TEXT = "Python es un lenguaje muy usado para aprender a programar."
+ENRICHED = EnrichedContent(original_article=ARTICLE, ai_summary=AI_TEXT)
+CONTENT = EnrichedContent(original_article=ARTICLE, ai_summary=AI_TEXT, translated_summary="")
 GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
 OPTIONS = ["--tema", "Python", "--idioma", "inglés"]
 EMPTY_TEXT_ERROR = "No has escrito nada. Inténtalo de nuevo."
@@ -59,10 +62,17 @@ def fast_plain_console(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def no_real_ai_token(monkeypatch):
+    """Never call the real AI from tests, even if a .env file has a token."""
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+
+
 @pytest.fixture
 def orchestrator():
     fake = create_autospec(WikiEnrichmentOrchestrator, instance=True)
     fake.fetch_article.return_value = ARTICLE
+    fake.enrich_article.return_value = ENRICHED
     with patch("cli.build_orchestrator", return_value=fake):
         yield fake
 
@@ -277,4 +287,46 @@ def test_full_flow_creates_a_real_file_with_simulated_data(
     text = read_document(tmp_path / file_name)
     assert "Python" in text
     assert "A programming language." in text
-    assert text.count(EMPTY_SECTION_TEXT) == 2
+    assert "A concise summary." in text
+    assert text.count(EMPTY_SECTION_TEXT) == 1
+
+
+def test_enriched_text_is_shown_and_exported(orchestrator, summary) -> None:
+    result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Texto enriquecido con IA" in result.output
+    assert AI_TEXT in result.output
+    orchestrator.enrich_article.assert_called_once_with(ARTICLE)
+    exported_content = orchestrator.export_document.call_args.args[0]
+    assert exported_content.ai_summary == AI_TEXT
+
+
+@pytest.mark.parametrize("error", [EnrichmentError("no token"), ProviderTimeoutError("slow")])
+def test_ai_failure_shows_a_message_and_keeps_going(orchestrator, summary, error) -> None:
+    orchestrator.enrich_article.side_effect = error
+
+    result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    assert "No he podido enriquecer el texto con IA" in result.output
+    assert "Texto enriquecido con IA" not in result.output
+    exported_content = orchestrator.export_document.call_args.args[0]
+    assert exported_content.ai_summary == ""
+    summary.assert_called_once_with("Python", "inglés", "TXT", "output/apuntes.txt")
+
+
+def test_real_adapters_without_token_still_export_the_original(tmp_path, monkeypatch, summary) -> None:
+    """Without HF_TOKEN the app warns about the AI and still saves the file."""
+    responses = [
+        make_response(json_data={"query": {"search": [{"title": "Python"}]}}),
+        make_response(text='<div id="mw-content-text"><p>Un lenguaje.</p></div>'),
+    ]
+    monkeypatch.setattr(cli, "EXPORT_FOLDER", str(tmp_path))
+
+    with patch(GET, side_effect=responses):
+        result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    assert "No he podido enriquecer el texto con IA" in result.output
+    assert "Un lenguaje." in read_document(tmp_path / "apuntes.txt")
