@@ -12,7 +12,7 @@ from rich.table import Table
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.bootstrap import build_orchestrator
 from wiki_enrichment.domain.exceptions import ResourceNotFoundError, WikiEnrichmentError
-from wiki_enrichment.domain.models import ArticleContent
+from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
 
 WIKIPEDIA_LANGUAGE = "es"
 BANNER_FONT = "larry3d"
@@ -27,6 +27,7 @@ FILE_NAME_QUESTION = "¿Con qué nombre quieres guardar el archivo?"
 YES, NO = "Y", "N"
 EXPORT_FORMATS = {"P": "PDF", "T": "TXT"}
 EXTENSIONS = {"PDF": ".pdf", "TXT": ".txt"}
+EXPORT_FOLDER = "output"
 NOT_EXPORTED = "No"
 NO_FILE = "-"
 
@@ -168,14 +169,37 @@ def show_article(article: ArticleContent) -> None:
     console.print(Panel(article.full_text, title=f"Resultados sobre {article.title}", border_style="green"))
 
 
-def export_research() -> tuple[str, str]:
+def build_content(article: ArticleContent) -> EnrichedContent:
+    """Group the contents to export.
+
+    TODO: fill ai_summary and translated_summary once AI and translation exist.
+    """
+    return EnrichedContent(original_article=article, ai_summary="", translated_summary="")
+
+
+def export_research(
+    orchestrator: WikiEnrichmentOrchestrator, content: EnrichedContent
+) -> tuple[str, str]:
     if ask_option(EXPORT_QUESTION, [YES, NO]) == NO:
         return NOT_EXPORTED, NO_FILE
     export_format = EXPORT_FORMATS[ask_option(FORMAT_QUESTION, EXPORT_FORMATS)]
     file_name = ask_file_name(export_format)
-    print()
-    run_steps([(f"Exportando {file_name}...", None)])
-    return export_format, file_name
+    path = f"{EXPORT_FOLDER}/{file_name}"
+    try:
+        print()
+        run_steps([(
+            f"Exportando {file_name}...",
+            lambda: orchestrator.export_document(content, export_format, path),
+        )])
+    except NotImplementedError:
+        print()
+        show_error(f"La exportación a {export_format} todavía no está disponible.")
+        return NOT_EXPORTED, NO_FILE
+    except WikiEnrichmentError:
+        print()
+        show_error("No he podido guardar el archivo. Revisa que tienes permisos y espacio en disco.")
+        return NOT_EXPORTED, NO_FILE
+    return export_format, path
 
 
 def show_summary(topic: str, language: str, export_format: str, file_name: str) -> None:
@@ -213,7 +237,7 @@ def main(
     orchestrator = build_orchestrator(wikipedia_language=WIKIPEDIA_LANGUAGE)
     article, topic = research_topic(orchestrator, topic, language)
     show_article(article)
-    export_format, file_name = export_research()
+    export_format, file_name = export_research(orchestrator, build_content(article))
 
     show_summary(topic, language, export_format, file_name)
     say_goodbye()

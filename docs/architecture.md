@@ -35,6 +35,10 @@ The application orchestrator follows this sequence:
 `export_path` is treated as a base path; the orchestrator requests
 `<export_path>.txt` and `<export_path>.pdf`.
 
+`export_document(content, export_format, path)` exports a single document in
+the format chosen by the user (`"TXT"` or `"PDF"`); `path` already includes the
+extension. The CLI saves files inside the `output/` folder.
+
 `fetch_article(topic)` exposes only the first step, so the CLI can show the
 article while the enrichment, translation, and export stages are still in
 progress.

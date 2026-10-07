@@ -11,13 +11,15 @@ from typer.testing import CliRunner
 import cli
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.domain.exceptions import (
+    ExportError,
     ProviderTimeoutError,
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.domain.models import ArticleContent
+from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
+CONTENT = EnrichedContent(original_article=ARTICLE, ai_summary="", translated_summary="")
 GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
 OPTIONS = ["--tema", "Python", "--idioma", "inglés"]
 EMPTY_TEXT_ERROR = "No has escrito nada. Inténtalo de nuevo."
@@ -137,19 +139,20 @@ def test_empty_or_invalid_export_answers_are_asked_again(orchestrator, summary) 
 @pytest.mark.parametrize(
     ("answers", "export_format", "file_name"),
     [
-        ("P\napuntes", "PDF", "apuntes.pdf"),
-        ("t\nmis apuntes", "TXT", "mis apuntes.txt"),
-        ("P\nresumen.PDF", "PDF", "resumen.pdf"),
-        ("T\nnotas.pdf", "TXT", "notas.pdf.txt"),
+        ("P\napuntes", "PDF", "output/apuntes.pdf"),
+        ("t\nmis apuntes", "TXT", "output/mis apuntes.txt"),
+        ("P\nresumen.PDF", "PDF", "output/resumen.pdf"),
+        ("T\nnotas.pdf", "TXT", "output/notas.pdf.txt"),
     ],
 )
-def test_chosen_format_and_file_name_reach_the_summary(
+def test_chosen_format_and_file_name_are_exported(
     orchestrator, summary, answers, export_format, file_name
 ) -> None:
     result = run_cli(OPTIONS, f"Y\n{answers}\n")
 
     assert result.exit_code == 0, result.output
     assert cli.FILE_NAME_QUESTION in result.output
+    orchestrator.export_document.assert_called_once_with(CONTENT, export_format, file_name)
     summary.assert_called_once_with("Python", "inglés", export_format, file_name)
 
 
@@ -158,6 +161,27 @@ def test_no_export_does_not_ask_for_a_file_name(orchestrator, summary) -> None:
 
     assert result.exit_code == 0, result.output
     assert cli.FILE_NAME_QUESTION not in result.output
+    orchestrator.export_document.assert_not_called()
+
+
+def test_export_not_available_yet_shows_a_message(orchestrator, summary) -> None:
+    orchestrator.export_document.side_effect = NotImplementedError
+
+    result = run_cli(OPTIONS, "Y\nP\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    assert "La exportación a PDF todavía no está disponible." in result.output
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
+
+
+def test_export_failure_shows_a_message(orchestrator, summary) -> None:
+    orchestrator.export_document.side_effect = ExportError("disk full")
+
+    result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    assert "No he podido guardar el archivo." in result.output
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
 def test_invalid_file_names_are_asked_again(orchestrator, summary) -> None:
@@ -168,7 +192,7 @@ def test_invalid_file_names_are_asked_again(orchestrator, summary) -> None:
     assert "no puede llevar estos símbolos: ?" in result.output
     assert "'con' es un nombre reservado" in result.output
     assert "no puede terminar en punto" in result.output
-    summary.assert_called_once_with("Python", "inglés", "PDF", "notas.pdf")
+    summary.assert_called_once_with("Python", "inglés", "PDF", "output/notas.pdf")
 
 
 @pytest.mark.parametrize(

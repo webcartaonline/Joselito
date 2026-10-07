@@ -12,3 +12,7 @@ class ResourceNotFoundError(WikiEnrichmentError):
 class ProviderTimeoutError(WikiEnrichmentError):
     """Raised when an external provider exceeds its configured timeout."""
 
+
+class ExportError(WikiEnrichmentError):
+    """Raised when a document cannot be saved."""
+

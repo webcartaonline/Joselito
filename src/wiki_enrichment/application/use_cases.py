@@ -35,6 +35,23 @@ class WikiEnrichmentOrchestrator:
 
         return self._wikipedia_source.fetch_article(topic)
 
+    def export_document(
+        self, content: EnrichedContent, export_format: str, path: str
+    ) -> None:
+        """Export content only in the format chosen by the user.
+
+        ``export_format`` must be ``"TXT"`` or ``"PDF"`` and ``path`` is the
+        full file path, extension included (for example ``output/notes.pdf``).
+        """
+
+        exporters = {
+            "TXT": self._document_exporter.export_txt,
+            "PDF": self._document_exporter.export_pdf,
+        }
+        if export_format not in exporters:
+            raise ValueError(f"Unsupported export format: {export_format}")
+        exporters[export_format](content, path)
+
     def execute(
         self, topic: str, target_lang: str, export_path: str
     ) -> EnrichedContent:
