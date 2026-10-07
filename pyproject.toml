@@ -9,6 +9,7 @@ requires-python = ">=3.11"
 dependencies = [
     "requests==2.34.2",
     "beautifulsoup4==4.15.0",
+    "fpdf2==2.8.9",
 ]
 
 [project.optional-dependencies]
@@ -16,10 +17,14 @@ test = [
     "pytest==9.1.1",
     "pytest-bdd==9.0.0",
     "pytest-cov==7.1.0",
+    "pypdf==6.19.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+wiki_enrichment = ["infrastructure/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

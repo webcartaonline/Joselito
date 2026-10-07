@@ -11,7 +11,9 @@ clients, AI SDKs, translation libraries, and document-generation libraries.
 - **Application** contains use cases that coordinate domain ports. It receives
   all collaborators through its constructor and imports no concrete adapters.
 - **Infrastructure** contains provider-specific adapter implementations. The
-  current classes are placeholders that deliberately perform no I/O.
+  document exporter writes real TXT and PDF files (PDFs use `fpdf2` with the
+  bundled DejaVu font in `infrastructure/fonts/`); the AI and translation
+  adapters are still placeholders.
 - **Presentation** is the CLI (`cli.py`) or any other user-facing entry point.
   It obtains a fully wired orchestrator from
   `wiki_enrichment.bootstrap.build_orchestrator`, which is the only module that

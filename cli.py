@@ -191,10 +191,6 @@ def export_research(
             f"Exportando {file_name}...",
             lambda: orchestrator.export_document(content, export_format, path),
         )])
-    except NotImplementedError:
-        print()
-        show_error(f"La exportación a {export_format} todavía no está disponible.")
-        return NOT_EXPORTED, NO_FILE
     except WikiEnrichmentError:
         print()
         show_error("No he podido guardar el archivo. Revisa que tienes permisos y espacio en disco.")

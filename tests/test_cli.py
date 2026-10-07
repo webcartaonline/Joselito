@@ -164,16 +164,6 @@ def test_no_export_does_not_ask_for_a_file_name(orchestrator, summary) -> None:
     orchestrator.export_document.assert_not_called()
 
 
-def test_export_not_available_yet_shows_a_message(orchestrator, summary) -> None:
-    orchestrator.export_document.side_effect = NotImplementedError
-
-    result = run_cli(OPTIONS, "Y\nP\napuntes\n")
-
-    assert result.exit_code == 0, result.output
-    assert "La exportación a PDF todavía no está disponible." in result.output
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
-
-
 def test_export_failure_shows_a_message(orchestrator, summary) -> None:
     orchestrator.export_document.side_effect = ExportError("disk full")
 

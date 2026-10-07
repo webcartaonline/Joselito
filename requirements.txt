@@ -6,3 +6,5 @@ pytest-cov==7.1.0
 typer==0.27.2
 rich==15.0.0
 pyfiglet==1.0.4
+fpdf2==2.8.9
+pypdf==6.19.0
