@@ -1,5 +1,3 @@
-"""Integration tests for the orchestrator with a mocked Wikipedia adapter."""
-
 from unittest.mock import create_autospec, patch
 
 from tests.helpers.wikipedia_mocks import (
@@ -20,7 +18,7 @@ from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
 
 @patch(REQUEST_TARGET)
 def test_orchestrator_runs_with_real_wikipedia_adapter(mock_get) -> None:
-    """Run the pipeline with a real adapter and mocked HTTP responses."""
+
     mock_get.side_effect = [
         make_search_response("Python"),
         make_article_response(build_article_html(["A language."])),

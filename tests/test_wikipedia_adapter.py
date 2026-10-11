@@ -44,7 +44,7 @@ def test_fetch_article_returns_title_and_first_five_paragraphs(
 
 @patch(REQUEST_TARGET)
 def test_fetch_article_raises_not_found_when_no_results(mock_get) -> None:
-    """Raise not found when the search API returns no matches."""
+
     mock_get.return_value = make_response(json_data={"query": {"search": []}})
 
     with pytest.raises(ResourceNotFoundError):
@@ -53,7 +53,7 @@ def test_fetch_article_raises_not_found_when_no_results(mock_get) -> None:
 
 @patch(REQUEST_TARGET)
 def test_fetch_article_raises_timeout_error(mock_get) -> None:
-    """Map a search timeout to a provider timeout error."""
+
     mock_get.side_effect = requests.Timeout()
 
     with pytest.raises(ProviderTimeoutError):
@@ -71,7 +71,7 @@ def test_fetch_article_raises_timeout_on_download(mock_get) -> None:
 
 @patch(REQUEST_TARGET)
 def test_fetch_article_wraps_network_errors(mock_get) -> None:
-    """Map connection failures to the base domain error."""
+
     mock_get.side_effect = requests.ConnectionError("no internet")
 
     with pytest.raises(WikiEnrichmentError):
@@ -174,7 +174,7 @@ def test_fetch_article_encodes_special_characters_in_download_url(
 
 @patch(REQUEST_TARGET)
 def test_fetch_article_raises_not_found_on_404(mock_get) -> None:
-    """Raise not found when the article page returns 404."""
+
     mock_get.side_effect = [
         make_search_response(),
         make_response(status_code=404),

@@ -14,4 +14,3 @@ class ProviderTimeoutError(WikiEnrichmentError):
 
 
 class EnrichmentError(WikiEnrichmentError):
-    """Raised when the AI provider fails to generate an enrichment."""

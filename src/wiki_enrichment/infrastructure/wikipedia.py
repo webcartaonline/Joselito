@@ -18,7 +18,6 @@ HEADERS = {"User-Agent": "WikiEnrichmentBot/1.0 (bootcamp project)"}
 
 class WikipediaSourceAdapter:
 
-
     def __init__(self, language: str = "en") -> None:
         self._base_url = f"https://{language}.wikipedia.org"
 
@@ -39,7 +38,6 @@ class WikipediaSourceAdapter:
         return ArticleContent(title=title, paragraphs=paragraphs)
 
     def _search_title(self, topic: str) -> str:
-        """Search Wikipedia and return the first matching article title."""
         response = requests.get(
             f"{self._base_url}/w/api.php",
             params={
@@ -61,7 +59,6 @@ class WikipediaSourceAdapter:
 
     @staticmethod
     def _parse_search_title(payload: object, topic: str) -> str:
-        """Extract the first article title from a search payload."""
         try:
             results = payload["query"]["search"]  # type: ignore[index]
         except (KeyError, TypeError) as exc:

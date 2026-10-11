@@ -1,5 +1,3 @@
-"""Hugging Face adapter implementing the ContentEnricher port."""
-
 import os
 
 from dotenv import load_dotenv
@@ -21,7 +19,6 @@ SYSTEM_PROMPT = (
 
 
 class HuggingFaceEnricher:
-    """Enrich an article with an AI-generated summary using Hugging Face."""
 
     def __init__(
         self,
@@ -42,8 +39,6 @@ class HuggingFaceEnricher:
         self._client = InferenceClient(api_key=api_key, timeout=timeout)
 
     def enrich(self, article: ArticleContent) -> EnrichedContent:
-        """Generate an AI summary for the given article."""
-
         if not article.full_text.strip():
             raise EnrichmentError("Cannot enrich an article without text.")
 
