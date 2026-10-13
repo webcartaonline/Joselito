@@ -1,3 +1,4 @@
+import logging
 import time
 from typing import Callable, Optional
 
@@ -13,6 +14,14 @@ from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.bootstrap import build_orchestrator
 from wiki_enrichment.domain.exceptions import ResourceNotFoundError, WikiEnrichmentError
 from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from wiki_enrichment.infrastructure.logging_config import (
+    LOGGER_NAME,
+    configure_logging,
+    generate_run_id,
+    set_run_id,
+)
+
+logger = logging.getLogger(f"{LOGGER_NAME}.cli")
 
 WIKIPEDIA_LANGUAGE = "es"
 BANNER_FONT = "larry3d"
@@ -259,11 +268,29 @@ def main(
     idioma: Optional[str] = typer.Option(None, help="Idioma de la traducción"),
 ):
     """Joselito: investiga un tema en Wikipedia, lo enriquece y lo traduce."""
+    configure_logging()
+    set_run_id(generate_run_id())
+    logger.info("Application started")
+    try:
+        run_session(tema, idioma)
+    except typer.Exit:
+        logger.info("Application finished with errors")
+        raise
+    except Exception:
+        logger.critical("Unexpected error", exc_info=True)
+        raise
+    logger.info("Application finished")
+
+
+def run_session(tema: Optional[str], idioma: Optional[str]) -> None:
+    """Run one interactive research session."""
     show_banner("Hola, soy")
     show_banner("Joselito")
 
     topic = tema or ask_text(TOPIC_QUESTION)
+    logger.info("Topic selected: %s", topic)
     language = idioma or ask_text(LANGUAGE_QUESTION)
+    logger.info("Target language selected: %s", language)
 
     orchestrator = build_orchestrator(wikipedia_language=WIKIPEDIA_LANGUAGE)
     article, topic = research_topic(orchestrator, topic)
@@ -274,6 +301,7 @@ def main(
     translated_summary = translate_text(language)
     content = build_content(article, ai_summary, translated_summary)
     export_format, file_name = export_research(orchestrator, content)
+    logger.info("Export result: format=%s file=%s", export_format, file_name)
 
     show_summary(topic, language, export_format, file_name)
     say_goodbye()
