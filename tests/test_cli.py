@@ -19,6 +19,7 @@ from wiki_enrichment.domain.models import ArticleContent
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
 GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
+TRANSLATION_POST = "wiki_enrichment.infrastructure.translation.requests.post"
 OPTIONS = ["--tema", "Python", "--idioma", "inglés"]
 EMPTY_TEXT_ERROR = "No has escrito nada. Inténtalo de nuevo."
 NETWORK_ERROR = "No he podido conectar con Wikipedia"
@@ -54,6 +55,7 @@ def fast_plain_console(monkeypatch):
 def orchestrator():
     fake = create_autospec(WikiEnrichmentOrchestrator, instance=True)
     fake.fetch_article.return_value = ARTICLE
+    fake.translate_article.return_value = "Un lenguaje de programación."
     with patch("cli.build_orchestrator", return_value=fake):
         yield fake
 
@@ -87,6 +89,7 @@ def test_options_skip_the_topic_and_language_questions(orchestrator, summary) ->
     assert cli.TOPIC_QUESTION not in result.output
     assert cli.LANGUAGE_QUESTION not in result.output
     orchestrator.fetch_article.assert_called_once_with("Python")
+    orchestrator.translate_article.assert_called_once_with(ARTICLE, "inglés")
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
 
 
@@ -105,8 +108,30 @@ def test_successful_run_shows_article_summary_and_goodbye(orchestrator) -> None:
 
     assert result.exit_code == 0, result.output
     assert "A programming language." in result.output
+    assert "Un lenguaje de programación." in result.output
     assert "Resumen" in result.output
     assert "Mi trabajo aquí ha terminado" in result.output
+
+
+def test_translator_timeout_is_reported_and_exits(orchestrator, summary) -> None:
+    orchestrator.translate_article.side_effect = ProviderTimeoutError("slow")
+
+    result = run_cli(OPTIONS, "N\n")
+
+    assert result.exit_code == 1
+    assert "DeepTranslate ha tardado demasiado" in result.output
+    summary.assert_not_called()
+
+
+def test_translation_failure_is_reported_and_exits(orchestrator, summary) -> None:
+    orchestrator.translate_article.side_effect = WikiEnrichmentError("provider unavailable")
+
+    result = run_cli(OPTIONS, "N\n")
+
+    assert result.exit_code == 1
+    assert "No he podido traducir el contenido con DeepTranslate" in result.output
+    assert "provider unavailable" in result.output
+    summary.assert_not_called()
 
 
 def test_empty_topic_is_asked_again(orchestrator, summary) -> None:
@@ -179,16 +204,29 @@ def test_network_failure_with_real_adapters_exits_with_code_1() -> None:
     assert NETWORK_ERROR in result.output
 
 
-def test_full_flow_with_real_adapters_searches_spanish_wikipedia(summary) -> None:
+def test_full_flow_with_adapters_translates_after_searching_spanish_wikipedia(
+    summary, monkeypatch
+) -> None:
     responses = [
         make_response(json_data={"query": {"search": [{"title": "Python"}]}}),
         make_response(text='<div id="mw-content-text"><p>Un lenguaje.</p></div>'),
     ]
+    translation_response = make_response(
+        json_data={"data": {"translations": {"translatedText": "A language."}}}
+    )
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
 
     with patch(GET, side_effect=responses) as mock_get:
-        result = run_cli(OPTIONS, "N\n")
+        with patch(TRANSLATION_POST, return_value=translation_response) as mock_post:
+            result = run_cli(OPTIONS, "N\n")
 
     assert result.exit_code == 0, result.output
     assert "Un lenguaje." in result.output
+    assert "A language." in result.output
     assert mock_get.call_args_list[0].args[0].startswith("https://es.wikipedia.org")
+    assert mock_post.call_args.kwargs["json"] == {
+        "q": "Un lenguaje.",
+        "source": "es",
+        "target": "en",
+    }
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)

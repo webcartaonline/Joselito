@@ -35,6 +35,11 @@ class WikiEnrichmentOrchestrator:
 
         return self._wikipedia_source.fetch_article(topic)
 
+    def translate_article(self, article: ArticleContent, target_lang: str) -> str:
+        """Translate the fetched article while keeping provider I/O in its adapter."""
+
+        return self._translator.translate(article.full_text, target_lang)
+
     def execute(
         self, topic: str, target_lang: str, export_path: str
     ) -> EnrichedContent:

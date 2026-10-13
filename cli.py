@@ -11,7 +11,11 @@ from rich.table import Table
 
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.bootstrap import build_orchestrator
-from wiki_enrichment.domain.exceptions import ResourceNotFoundError, WikiEnrichmentError
+from wiki_enrichment.domain.exceptions import (
+    ProviderTimeoutError,
+    ResourceNotFoundError,
+    WikiEnrichmentError,
+)
 from wiki_enrichment.domain.models import ArticleContent
 
 WIKIPEDIA_LANGUAGE = "es"
@@ -100,30 +104,75 @@ def run_steps(steps: list[Step]) -> list[object]:
 
 
 def research_topic(
-    orchestrator: WikiEnrichmentOrchestrator, topic: str, language: str
+    orchestrator: WikiEnrichmentOrchestrator, topic: str
 ) -> tuple[ArticleContent, str]:
     while True:
         try:
             print()
-            article, _, _ = run_steps([
-                (f"Buscando '{topic}' en Wikipedia...", lambda: orchestrator.fetch_article(topic)),
-                ("Enriqueciendo con IA...", None),
-                (f"Traduciendo a {language}...", None),
-            ])
+            article = run_steps(
+                [
+                    (
+                        f"Buscando '{topic}' en Wikipedia...",
+                        lambda: orchestrator.fetch_article(topic),
+                    ),
+                ]
+            )[0]
             return article, topic
         except ResourceNotFoundError:
             print()
-            show_error(f"No he encontrado nada sobre '{topic}' en Wikipedia. Prueba con otro tema.")
+            show_error(
+                f"No he encontrado nada sobre '{topic}' en Wikipedia. "
+                "Prueba con otro tema."
+            )
             topic = ask_text(TOPIC_QUESTION)
         except WikiEnrichmentError:
             print()
-            show_error("No he podido conectar con Wikipedia. Revisa tu conexión a internet e inténtalo más tarde.")
+            show_error(
+                "No he podido conectar con Wikipedia. Revisa tu conexión a internet "
+                "e inténtalo más tarde."
+            )
             raise typer.Exit(code=1)
 
 
 def show_article(article: ArticleContent) -> None:
     print()
-    console.print(Panel(article.full_text, title=f"Resultados sobre {article.title}", border_style="green"))
+    console.print(
+        Panel(
+            article.full_text,
+            title=f"Resultados sobre {article.title}",
+            border_style="green",
+        )
+    )
+
+
+def translate_article(
+    orchestrator: WikiEnrichmentOrchestrator,
+    article: ArticleContent,
+    language: str,
+) -> str:
+    """Translate and display article text, reporting expected provider failures."""
+
+    try:
+        translated_text = run_steps(
+            [
+                (
+                    f"Traduciendo a {language} con DeepTranslate...",
+                    lambda: orchestrator.translate_article(article, language),
+                ),
+            ]
+        )[0]
+    except ProviderTimeoutError:
+        print()
+        show_error("DeepTranslate ha tardado demasiado. Inténtalo de nuevo más tarde.")
+        raise typer.Exit(code=1) from None
+    except WikiEnrichmentError as exc:
+        print()
+        show_error(f"No he podido traducir el contenido con DeepTranslate: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    print()
+    console.print(Panel(translated_text, title=f"Traducción al {language}", border_style="green"))
+    return translated_text
 
 
 def export_research() -> str:
@@ -167,8 +216,9 @@ def main(
     language = idioma or ask_text(LANGUAGE_QUESTION)
 
     orchestrator = build_orchestrator(wikipedia_language=WIKIPEDIA_LANGUAGE)
-    article, topic = research_topic(orchestrator, topic, language)
+    article, topic = research_topic(orchestrator, topic)
     show_article(article)
+    translate_article(orchestrator, article, language)
     export_format = export_research()
 
     show_summary(topic, language, export_format)
