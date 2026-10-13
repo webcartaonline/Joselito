@@ -10,12 +10,22 @@ import pytest
 
 from wiki_enrichment.infrastructure.logging_config import (
     LOGGER_NAME,
+    REDACTION_PLACEHOLDER,
+    SensitiveDataFilter,
     UtcFormatter,
     configure_logging,
+    redact_sensitive_data,
     resolve_log_level,
 )
 
 LOG_FILE = Path("logs") / "app.log"
+
+HUGGING_FACE_TOKEN = "hf_abcdefghijklmnop"
+
+SECRET_SAMPLES = (
+    (f"Loading model with token {HUGGING_FACE_TOKEN}", HUGGING_FACE_TOKEN),
+    (f"Configuration HF_TOKEN={HUGGING_FACE_TOKEN}", HUGGING_FACE_TOKEN),
+)
 
 
 @pytest.fixture(autouse=True)
@@ -116,3 +126,54 @@ def test_resolve_log_level_prefers_explicit_argument(
     monkeypatch.setenv("LOG_LEVEL", "info")
 
     assert resolve_log_level("WARNING") == logging.WARNING
+
+
+@pytest.mark.parametrize(("message", "secret"), SECRET_SAMPLES)
+def test_sensitive_values_are_redacted_in_log_file(
+    log_workspace: Path, message: str, secret: str
+) -> None:
+    """Known secrets never reach the log file."""
+    logger = configure_logging()
+
+    logger.info(message)
+
+    content = (log_workspace / LOG_FILE).read_text(encoding="utf-8")
+    assert secret not in content
+    assert REDACTION_PLACEHOLDER in content
+
+
+@pytest.mark.parametrize(("message", "secret"), SECRET_SAMPLES)
+def test_redact_sensitive_data_replaces_secrets(message: str, secret: str) -> None:
+    """Every known secret pattern is replaced."""
+    redacted = redact_sensitive_data(message)
+
+    assert secret not in redacted
+    assert REDACTION_PLACEHOLDER in redacted
+
+
+def test_redact_sensitive_data_keeps_normal_text() -> None:
+    """Plain messages are left untouched."""
+    assert redact_sensitive_data("App started") == "App started"
+
+
+def test_redact_sensitive_data_ignores_other_keys() -> None:
+    """Only the Hugging Face token is redacted."""
+    assert redact_sensitive_data("key sk-abcdefghijklmnop") == "key sk-abcdefghijklmnop"
+
+
+def test_sensitive_data_filter_redacts_record_message() -> None:
+    """The filter rewrites the record message with the token removed."""
+    record = logging.LogRecord(
+        LOGGER_NAME,
+        logging.INFO,
+        __file__,
+        1,
+        f"token {HUGGING_FACE_TOKEN}",
+        None,
+        None,
+    )
+
+    allowed = SensitiveDataFilter().filter(record)
+
+    assert allowed is True
+    assert HUGGING_FACE_TOKEN not in record.getMessage()
