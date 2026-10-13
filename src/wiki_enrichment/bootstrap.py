@@ -8,12 +8,14 @@ from wiki_enrichment.domain.ports import ContentEnricher
 from wiki_enrichment.infrastructure.ai import AIContentEnricher
 from wiki_enrichment.infrastructure.exporters import DocumentExporterAdapter
 from wiki_enrichment.infrastructure.huggingface_enricher import HuggingFaceEnricher
+from wiki_enrichment.infrastructure.huggingface_summarizer import HuggingFaceSummarizer
 from wiki_enrichment.infrastructure.translation import TranslationAdapter
 from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
 
 HF_MODEL_VARIABLE = "HF_MODEL"
 DEFAULT_HF_MODEL = "openai/gpt-oss-120b"
-
+HF_SUMMARIZER_MODEL_VARIABLE = "HF_SUMMARIZER_MODEL"
+DEFAULT_HF_SUMMARIZER_MODEL = "facebook/bart-large-cnn"
 
 def build_content_enricher() -> ContentEnricher:
     """Return the Hugging Face enricher, or a fallback if it cannot be configured.
@@ -37,3 +39,9 @@ def build_orchestrator(wikipedia_language: str = "es") -> WikiEnrichmentOrchestr
         translator=TranslationAdapter(),
         document_exporter=DocumentExporterAdapter(),
     )
+def build_brief_summarizer():
+    token = os.getenv("HF_TOKEN")
+    if not token:
+        pass
+    model = os.getenv(HF_SUMMARIZER_MODEL_VARIABLE, DEFAULT_HF_SUMMARIZER_MODEL)
+    return HuggingFaceSummarizer(model=model, token=token)
