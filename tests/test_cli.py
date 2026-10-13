@@ -16,6 +16,7 @@ from tests.helpers.fake_adapters import (
     FakeWikipediaSource,
 )
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
+from wiki_enrichment.domain.ports import ContentSummarizer
 from wiki_enrichment.domain.exceptions import (
     EnrichmentError,
     ExportError,
@@ -68,6 +69,10 @@ def no_real_ai_token(monkeypatch):
     """Never call the real AI from tests, even if a .env file has a token."""
     monkeypatch.delenv("HF_TOKEN", raising=False)
 
+@pytest.fixture(autouse=True)
+def skip_summary_question(monkeypatch):
+    """The summary question is tested in test_cli_summary.py, so these tests skip it."""
+    monkeypatch.setattr(cli.BriefSummaryFlow, "request", lambda self, content, language: None)
 
 @pytest.fixture
 def orchestrator():
