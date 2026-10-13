@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -17,11 +18,46 @@ LOG_MAX_BYTES = 1_000_000
 LOG_BACKUP_COUNT = 5
 LOG_ENCODING = "utf-8"
 
+REDACTION_PLACEHOLDER = "***"
+HUGGING_FACE_TOKEN_PATTERN = re.compile(r"hf_[A-Za-z0-9]{8,}")
+
 
 class UtcFormatter(logging.Formatter):
     """Formatter that renders timestamps in UTC instead of local time."""
 
     converter = time.gmtime
+
+
+def redact_sensitive_data(text: str) -> str:
+    """Replace the Hugging Face token found in a text with a placeholder.
+
+    Args:
+        text: Text that may contain the Hugging Face token.
+
+    Returns:
+        The text with every detected token replaced by
+        ``REDACTION_PLACEHOLDER``.
+    """
+
+    return HUGGING_FACE_TOKEN_PATTERN.sub(REDACTION_PLACEHOLDER, text)
+
+
+class SensitiveDataFilter(logging.Filter):
+    """Filter that removes the Hugging Face token from every log record."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Redact the record message and let it through.
+
+        Args:
+            record: The log record about to be formatted.
+
+        Returns:
+            Always ``True`` so the record is never dropped.
+        """
+
+        record.msg = redact_sensitive_data(record.getMessage())
+        record.args = ()
+        return True
 
 
 def resolve_log_level(level: str | None = None) -> int:
@@ -48,7 +84,8 @@ def build_file_handler(path: Path) -> RotatingFileHandler:
         path: Destination of the log file. Missing folders are created.
 
     Returns:
-        A handler writing UTF-8 lines with UTC timestamps.
+        A handler writing UTF-8 lines with UTC timestamps and the Hugging
+        Face token removed.
     """
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -59,6 +96,7 @@ def build_file_handler(path: Path) -> RotatingFileHandler:
         encoding=LOG_ENCODING,
     )
     handler.setFormatter(UtcFormatter(LOG_FORMAT, LOG_DATE_FORMAT))
+    handler.addFilter(SensitiveDataFilter())
     return handler
 
 
