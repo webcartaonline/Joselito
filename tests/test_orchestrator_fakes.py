@@ -1,5 +1,7 @@
 """Pipeline tests running the orchestrator only with contract fakes."""
 
+from unittest.mock import create_autospec
+
 from tests.helpers.content_mocks import (
     DEFAULT_EXPORT_BASE,
     DEFAULT_TARGET_LANG,
@@ -12,7 +14,9 @@ from tests.helpers.fake_adapters import (
     FakeTranslator,
     FakeWikipediaSource,
 )
+
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
+from wiki_enrichment.domain.ports import ContentSummarizer
 
 
 def test_execute_runs_full_pipeline_with_fakes(
@@ -23,7 +27,11 @@ def test_execute_runs_full_pipeline_with_fakes(
 ) -> None:
     """Coordinate all ports and export both documents without any I/O."""
     orchestrator = WikiEnrichmentOrchestrator(
-        fake_source, fake_enricher, fake_translator, fake_exporter
+        fake_source,
+        fake_enricher,
+        fake_translator,
+        fake_exporter,
+        create_autospec(ContentSummarizer, instance=True),
     )
 
     result = orchestrator.execute(DEFAULT_TOPIC, DEFAULT_TARGET_LANG, DEFAULT_EXPORT_BASE)
