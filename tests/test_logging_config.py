@@ -9,13 +9,19 @@ from pathlib import Path
 import pytest
 
 from wiki_enrichment.infrastructure.logging_config import (
+    DEFAULT_RUN_ID,
     LOGGER_NAME,
     REDACTION_PLACEHOLDER,
+    RUN_ID_LENGTH,
+    RunIdFilter,
     SensitiveDataFilter,
     UtcFormatter,
     configure_logging,
+    current_run_id,
+    generate_run_id,
     redact_sensitive_data,
     resolve_log_level,
+    set_run_id,
 )
 
 LOG_FILE = Path("logs") / "app.log"
@@ -37,6 +43,7 @@ def log_workspace(
     logger = logging.getLogger(LOGGER_NAME)
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
+    set_run_id(DEFAULT_RUN_ID)
     yield tmp_path
     for handler in list(logger.handlers):
         logger.removeHandler(handler)
@@ -68,7 +75,7 @@ def test_log_line_contains_utc_timestamp_and_level(log_workspace: Path) -> None:
     content = (log_workspace / LOG_FILE).read_text(encoding="utf-8")
     pattern = (
         r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| ERROR \| "
-        r"wiki_enrichment \| Something failed"
+        r"- \| wiki_enrichment \| Something failed"
     )
     assert re.search(pattern, content)
 
@@ -177,3 +184,54 @@ def test_sensitive_data_filter_redacts_record_message() -> None:
 
     assert allowed is True
     assert HUGGING_FACE_TOKEN not in record.getMessage()
+
+
+def test_configure_logging_writes_the_run_id(log_workspace: Path) -> None:
+    """Each line includes the identifier of the current run."""
+    logger = configure_logging()
+    run_id = "abc12345"
+    set_run_id(run_id)
+
+    logger.info("App started")
+
+    content = (log_workspace / LOG_FILE).read_text(encoding="utf-8")
+    assert f"| {run_id} |" in content
+
+
+def test_default_run_id_is_used_without_setting(log_workspace: Path) -> None:
+    """Without setting an identifier the default one is written."""
+    logger = configure_logging()
+
+    logger.info("App started")
+
+    content = (log_workspace / LOG_FILE).read_text(encoding="utf-8")
+    assert f"| {DEFAULT_RUN_ID} |" in content
+
+
+def test_generate_run_id_returns_unique_identifiers() -> None:
+    """Two generated identifiers differ and have the expected length."""
+    first = generate_run_id()
+    second = generate_run_id()
+
+    assert first != second
+    assert len(first) == RUN_ID_LENGTH
+
+
+def test_set_run_id_updates_the_current_identifier() -> None:
+    """Setting the identifier updates the value read back."""
+    set_run_id("run-42")
+
+    assert current_run_id() == "run-42"
+
+
+def test_run_id_filter_attaches_the_current_identifier() -> None:
+    """The filter adds the current run identifier to the record."""
+    set_run_id("run-99")
+    record = logging.LogRecord(
+        LOGGER_NAME, logging.INFO, __file__, 1, "message", None, None
+    )
+
+    allowed = RunIdFilter().filter(record)
+
+    assert allowed is True
+    assert record.run_id == "run-99"
