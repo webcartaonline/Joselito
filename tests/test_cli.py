@@ -1,5 +1,6 @@
 """Tests for the interactive command-line interface."""
 
+import logging
 import re
 from unittest.mock import MagicMock, create_autospec, patch
 
@@ -25,6 +26,7 @@ from wiki_enrichment.domain.exceptions import (
 )
 from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
 from wiki_enrichment.infrastructure.exporters import EMPTY_SECTION_TEXT, DocumentExporterAdapter
+from wiki_enrichment.infrastructure.logging_config import LOGGER_NAME
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
 AI_TEXT = "Python es un lenguaje muy usado para aprender a programar."
@@ -66,6 +68,22 @@ def fast_plain_console(monkeypatch):
 def no_real_ai_token(monkeypatch):
     """Never call the real AI from tests, even if a .env file has a token."""
     monkeypatch.delenv("HF_TOKEN", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def isolated_logs(monkeypatch, tmp_path):
+    """Send application logs to a temporary folder and clean them up."""
+    logger = logging.getLogger(LOGGER_NAME)
+    monkeypatch.chdir(tmp_path)
+    yield
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
+
+
+def read_log(workspace) -> str:
+    """Return the contents of the application log file."""
+    return (workspace / "logs" / "app.log").read_text(encoding="utf-8")
 
 
 @pytest.fixture
@@ -330,3 +348,42 @@ def test_real_adapters_without_token_still_export_the_original(tmp_path, monkeyp
     assert result.exit_code == 0, result.output
     assert "No he podido enriquecer el texto con IA" in result.output
     assert "Un lenguaje." in read_document(tmp_path / "apuntes.txt")
+
+
+RUN_ID_LINE = re.compile(
+    r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| INFO \| [0-9a-f]{8} \|"
+)
+
+
+def test_application_start_and_finish_are_logged(tmp_path, orchestrator) -> None:
+    result = run_cli(OPTIONS, "N\n")
+
+    assert result.exit_code == 0, result.output
+    content = read_log(tmp_path)
+    assert "Application started" in content
+    assert "Application finished" in content
+
+
+def test_selected_topic_and_language_are_logged(tmp_path, orchestrator) -> None:
+    run_cli(OPTIONS, "N\n")
+
+    content = read_log(tmp_path)
+    assert "Topic selected: Python" in content
+    assert "Target language selected: inglés" in content
+
+
+def test_each_log_line_contains_a_run_id(tmp_path, orchestrator) -> None:
+    run_cli(OPTIONS, "N\n")
+
+    assert RUN_ID_LINE.search(read_log(tmp_path))
+
+
+def test_unexpected_error_is_logged_as_critical(tmp_path, orchestrator) -> None:
+    orchestrator.fetch_article.side_effect = RuntimeError("boom")
+
+    result = run_cli(OPTIONS, "N\n")
+
+    assert result.exit_code == 1
+    content = read_log(tmp_path)
+    assert "| CRITICAL |" in content
+    assert "Unexpected error" in content
