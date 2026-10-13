@@ -4,8 +4,8 @@ import os
 
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.domain.exceptions import EnrichmentError
-from wiki_enrichment.domain.ports import ContentEnricher
-from wiki_enrichment.infrastructure.ai import AIContentEnricher
+from wiki_enrichment.domain.ports import ContentEnricher, ContentSummarizer
+from wiki_enrichment.infrastructure.ai import AIContentEnricher, AIContentSummarizer
 from wiki_enrichment.infrastructure.exporters import DocumentExporterAdapter
 from wiki_enrichment.infrastructure.huggingface_enricher import HuggingFaceEnricher
 from wiki_enrichment.infrastructure.huggingface_summarizer import HuggingFaceSummarizer
@@ -15,7 +15,7 @@ from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
 HF_MODEL_VARIABLE = "HF_MODEL"
 DEFAULT_HF_MODEL = "openai/gpt-oss-120b"
 HF_SUMMARIZER_MODEL_VARIABLE = "HF_SUMMARIZER_MODEL"
-DEFAULT_HF_SUMMARIZER_MODEL = "facebook/bart-large-cnn"
+
 
 def build_content_enricher() -> ContentEnricher:
     """Return the Hugging Face enricher, or a fallback if it cannot be configured.
@@ -30,6 +30,24 @@ def build_content_enricher() -> ContentEnricher:
         return AIContentEnricher(reason=str(error))
 
 
+def build_content_summarizer() -> ContentSummarizer:
+    """Return the Hugging Face summarizer, or a fallback if it cannot be configured.
+
+    It uses the enricher model unless HF_SUMMARIZER_MODEL is set in the .env file.
+    The model must support chat completion.
+    """
+
+    model = (
+        os.getenv(HF_SUMMARIZER_MODEL_VARIABLE)
+        or os.getenv(HF_MODEL_VARIABLE)
+        or DEFAULT_HF_MODEL
+    )
+    try:
+        return HuggingFaceSummarizer(model=model)
+    except EnrichmentError as error:
+        return AIContentSummarizer(reason=str(error))
+
+
 def build_orchestrator(wikipedia_language: str = "es") -> WikiEnrichmentOrchestrator:
     """Wire the concrete adapters into the application use case."""
 
@@ -38,10 +56,5 @@ def build_orchestrator(wikipedia_language: str = "es") -> WikiEnrichmentOrchestr
         content_enricher=build_content_enricher(),
         translator=TranslationAdapter(),
         document_exporter=DocumentExporterAdapter(),
+        content_summarizer=build_content_summarizer(),
     )
-def build_brief_summarizer():
-    token = os.getenv("HF_TOKEN")
-    if not token:
-        pass
-    model = os.getenv(HF_SUMMARIZER_MODEL_VARIABLE, DEFAULT_HF_SUMMARIZER_MODEL)
-    return HuggingFaceSummarizer(model=model, token=token)
