@@ -4,19 +4,26 @@ import logging
 import os
 import re
 import time
+from contextvars import ContextVar
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from uuid import uuid4
 
 LOGGER_NAME = "wiki_enrichment"
 LOG_DIRECTORY = Path("logs")
 LOG_FILE_NAME = "app.log"
 LOG_LEVEL_VARIABLE = "LOG_LEVEL"
 DEFAULT_LOG_LEVEL = "INFO"
-LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+LOG_FORMAT = "%(asctime)s | %(levelname)s | %(run_id)s | %(name)s | %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 LOG_MAX_BYTES = 1_000_000
 LOG_BACKUP_COUNT = 5
 LOG_ENCODING = "utf-8"
+
+RUN_ID_FIELD = "run_id"
+DEFAULT_RUN_ID = "-"
+RUN_ID_LENGTH = 8
+_current_run_id: ContextVar[str] = ContextVar(RUN_ID_FIELD, default=DEFAULT_RUN_ID)
 
 REDACTION_PLACEHOLDER = "***"
 HUGGING_FACE_TOKEN_PATTERN = re.compile(r"hf_[A-Za-z0-9]{8,}")
@@ -26,6 +33,45 @@ class UtcFormatter(logging.Formatter):
     """Formatter that renders timestamps in UTC instead of local time."""
 
     converter = time.gmtime
+
+
+def generate_run_id() -> str:
+    """Return a short unique identifier for one application run."""
+
+    return uuid4().hex[:RUN_ID_LENGTH]
+
+
+def set_run_id(run_id: str) -> None:
+    """Set the identifier attached to the log records of the current run.
+
+    Args:
+        run_id: Identifier to attach to the following log records.
+    """
+
+    _current_run_id.set(run_id)
+
+
+def current_run_id() -> str:
+    """Return the identifier attached to the log records of the current run."""
+
+    return _current_run_id.get()
+
+
+class RunIdFilter(logging.Filter):
+    """Filter that attaches the current run identifier to every record."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Add the run identifier to the record and let it through.
+
+        Args:
+            record: The log record about to be formatted.
+
+        Returns:
+            Always ``True`` so the record is never dropped.
+        """
+
+        record.run_id = current_run_id()
+        return True
 
 
 def redact_sensitive_data(text: str) -> str:
@@ -84,8 +130,8 @@ def build_file_handler(path: Path) -> RotatingFileHandler:
         path: Destination of the log file. Missing folders are created.
 
     Returns:
-        A handler writing UTF-8 lines with UTC timestamps and the Hugging
-        Face token removed.
+        A handler writing UTF-8 lines with UTC timestamps, the run
+        identifier and the Hugging Face token removed.
     """
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,7 +141,11 @@ def build_file_handler(path: Path) -> RotatingFileHandler:
         backupCount=LOG_BACKUP_COUNT,
         encoding=LOG_ENCODING,
     )
-    handler.setFormatter(UtcFormatter(LOG_FORMAT, LOG_DATE_FORMAT))
+    formatter = UtcFormatter(
+        LOG_FORMAT, LOG_DATE_FORMAT, defaults={RUN_ID_FIELD: DEFAULT_RUN_ID}
+    )
+    handler.setFormatter(formatter)
+    handler.addFilter(RunIdFilter())
     handler.addFilter(SensitiveDataFilter())
     return handler
 
