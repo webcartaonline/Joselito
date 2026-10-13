@@ -27,6 +27,8 @@ LANGUAGE_QUESTION = "¿A qué idioma quieres traducirlo?"
 EXPORT_QUESTION = "¿Quieres exportar la investigación? (Y/N)"
 FORMAT_QUESTION = "¿PDF (P) o TXT (T)?"
 FILE_NAME_QUESTION = "¿Con qué nombre quieres guardar el archivo?"
+EMPTY_ANSWER_ERROR = "No has escrito nada. Inténtalo de nuevo."
+MAX_TOPIC_LENGTH = 300  # Longest search that Wikipedia accepts.
 
 YES, NO = "Y", "N"
 EXPORT_FORMATS = {"P": "PDF", "T": "TXT"}
@@ -77,13 +79,43 @@ def prompt_user(question: str) -> str:
     return QuestionPrompt.ask(f"[bold yellow]#[/] [bold yellow]{question}[/]\n  [dim]»[/]")
 
 
-def ask_text(question: str) -> str:
+def topic_error(topic: str) -> Optional[str]:
+    """Return why a topic is not valid, or None if it can be searched."""
+    if not topic:
+        return EMPTY_ANSWER_ERROR
+    if len(topic) > MAX_TOPIC_LENGTH:
+        return f"El tema es demasiado largo (máximo {MAX_TOPIC_LENGTH} caracteres)."
+    return None
+
+
+def language_error(language: str) -> Optional[str]:
+    """Return why a language is not valid, or None if it can be used."""
+    if not language:
+        return EMPTY_ANSWER_ERROR
+    if not all(char.isalpha() or char.isspace() for char in language):
+        return f"'{language}' no es un idioma válido. Escribe solo letras, por ejemplo: inglés."
+    return None
+
+
+def ask_text(
+    question: str,
+    validate: Callable[[str], Optional[str]],
+    answer: Optional[str] = None,
+) -> str:
+    """Ask until the answer is valid.
+
+    ``answer`` is a value the user already gave (for example, with --tema).
+    """
     while True:
-        answer = prompt_user(question).strip()
-        if answer:
+        if answer is None:
+            answer = prompt_user(question)
+        answer = answer.strip()
+        error = validate(answer)
+        if error is None:
             return answer
         print()
-        show_error("No has escrito nada. Inténtalo de nuevo.")
+        show_error(error)
+        answer = None
 
 
 def ask_option(question: str, options: list[str] | dict[str, str]) -> str:
@@ -138,7 +170,7 @@ def research_topic(
         except ResourceNotFoundError:
             print()
             show_error(f"No he encontrado nada sobre '{topic}' en Wikipedia. Prueba con otro tema.")
-            topic = ask_text(TOPIC_QUESTION)
+            topic = ask_text(TOPIC_QUESTION, topic_error)
         except ProviderTimeoutError:
             print()
             show_error(WIKIPEDIA_TIMEOUT_ERROR)
@@ -281,8 +313,8 @@ def main(
     show_banner("Hola, soy")
     show_banner("Joselito")
 
-    topic = tema or ask_text(TOPIC_QUESTION)
-    language = idioma or ask_text(LANGUAGE_QUESTION)
+    topic = ask_text(TOPIC_QUESTION, topic_error, tema)
+    language = ask_text(LANGUAGE_QUESTION, language_error, idioma)
 
     orchestrator = build_orchestrator(wikipedia_language=WIKIPEDIA_LANGUAGE)
     article, topic = research_topic(orchestrator, topic)

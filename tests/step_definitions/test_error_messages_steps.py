@@ -8,6 +8,8 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from rich.console import Console
 from typer.testing import CliRunner
 
+import re
+
 import cli
 from tests.helpers.fake_adapters import (
     FakeContentEnricher,
@@ -23,6 +25,8 @@ REQUESTS_GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
 LANGUAGE = "inglés"
 NO_EXPORT = "N\n"
 TECHNICAL_WORDS = ["Traceback", "Exception", "Error:", "timed out", "Max retries"]
+VALID_TOPIC = "Python"
+REPEATED_TEXT = re.compile(r"\((?P<count>\d+) (?P<text>\w)\)")
 
 scenarios("../features/error_messages.feature")
 
@@ -72,8 +76,13 @@ def slow_ai(context) -> None:
     context["enricher"] = HuggingFaceEnricher(model="test/model", client=client)
 
 
-@when(parsers.parse('I research "{topic}"'))
-def research(context, topic: str) -> None:
+def expand(text: str) -> str:
+    """Turn "(301 x)" into 301 x letters, so long texts fit in the feature file."""
+    match = REPEATED_TEXT.fullmatch(text)
+    return match["text"] * int(match["count"]) if match else text
+
+
+def run_app(context, options: list[str], user_input: str) -> None:
     """Run the whole app from the terminal with the simulated services."""
     orchestrator = WikiEnrichmentOrchestrator(
         context["wikipedia"],
@@ -84,15 +93,37 @@ def research(context, topic: str) -> None:
     with patch("cli.build_orchestrator", return_value=orchestrator), patch(
         REQUESTS_GET, side_effect=context.get("http_failure")
     ):
-        context["result"] = runner.invoke(
-            cli.app, ["--tema", topic, "--idioma", LANGUAGE], input=context["user_input"]
-        )
+        context["result"] = runner.invoke(cli.app, options, input=user_input)
+
+
+@when(parsers.parse('I research "{topic}"'))
+def research(context, topic: str) -> None:
+    """Give the topic and language as options."""
+    run_app(context, ["--tema", topic, "--idioma", LANGUAGE], context["user_input"])
+
+
+@when(parsers.re(r'I type the topic "(?P<topic>.*)" and then "(?P<valid_topic>.+)"'))
+def type_topic(context, topic: str, valid_topic: str) -> None:
+    """Type a wrong topic, then a valid one when the app asks again."""
+    run_app(context, [], f"{expand(topic)}\n{valid_topic}\n{LANGUAGE}\n{NO_EXPORT}")
+
+
+@when(parsers.re(r'I type the language "(?P<language>.*)" and then "(?P<valid_language>.+)"'))
+def type_language(context, language: str, valid_language: str) -> None:
+    """Type a wrong language, then a valid one when the app asks again."""
+    run_app(context, [], f"{VALID_TOPIC}\n{language}\n{valid_language}\n{NO_EXPORT}")
 
 
 @then(parsers.parse('I see the message "{message}"'))
 def message_is_shown(context, message: str) -> None:
     """The user reads a clear message in Spanish."""
     assert message in context["result"].output
+
+
+@then(parsers.parse('Wikipedia only receives the topic "{topic}"'))
+def only_valid_topic_is_searched(context, topic: str) -> None:
+    """Wrong topics never reach Wikipedia."""
+    assert context["wikipedia"].requested_topics == [topic]
 
 
 @then("I do not see any technical error")

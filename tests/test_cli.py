@@ -146,6 +146,44 @@ def test_empty_language_is_asked_again(orchestrator, summary) -> None:
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
+def test_too_long_topic_is_asked_again(orchestrator, summary) -> None:
+    long_topic = "x" * (cli.MAX_TOPIC_LENGTH + 1)
+
+    result = run_cli(["--tema", long_topic, "--idioma", "inglés"], "Python\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "El tema es demasiado largo" in result.output
+    orchestrator.fetch_article.assert_called_once_with("Python")
+
+
+def test_invalid_language_is_asked_again(orchestrator, summary) -> None:
+    result = run_cli(["--tema", "Python"], "123\ninglés\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "'123' no es un idioma válido" in result.output
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
+
+
+@pytest.mark.parametrize("topic", ["", "x" * 301])
+def test_topic_error_rejects_invalid_topics(topic) -> None:
+    assert cli.topic_error(topic) is not None
+
+
+@pytest.mark.parametrize("topic", ["Python", "Agujero negro", "C++", "x" * 300])
+def test_topic_error_accepts_valid_topics(topic) -> None:
+    assert cli.topic_error(topic) is None
+
+
+@pytest.mark.parametrize("language", ["", "123", "inglés!", "en-US"])
+def test_language_error_rejects_invalid_languages(language) -> None:
+    assert cli.language_error(language) is not None
+
+
+@pytest.mark.parametrize("language", ["inglés", "francés", "chino mandarín", "EN"])
+def test_language_error_accepts_valid_languages(language) -> None:
+    assert cli.language_error(language) is None
+
+
 def test_empty_or_invalid_export_answers_are_asked_again(orchestrator, summary) -> None:
     result = run_cli(OPTIONS, "\nX\nN\n")
 
