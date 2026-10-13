@@ -34,6 +34,8 @@ GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
 OPTIONS = ["--tema", "Python", "--idioma", "inglés"]
 EMPTY_TEXT_ERROR = "No has escrito nada. Inténtalo de nuevo."
 NETWORK_ERROR = "No he podido conectar con Wikipedia"
+WIKIPEDIA_SLOW = "Wikipedia está tardando demasiado en responder"
+AI_SLOW = "La IA está tardando demasiado en responder"
 ANSI_CODES = re.compile(r"\x1b\[[0-9;]*m")
 
 runner = CliRunner()
@@ -230,16 +232,20 @@ def test_unknown_topic_asks_for_a_new_one(orchestrator, summary) -> None:
 
 
 @pytest.mark.parametrize(
-    "error", [WikiEnrichmentError("offline"), ProviderTimeoutError("slow")]
+    ("error", "message"),
+    [
+        (WikiEnrichmentError("offline"), NETWORK_ERROR),
+        (ProviderTimeoutError("slow"), WIKIPEDIA_SLOW),
+    ],
 )
-def test_provider_errors_exit_with_code_1(orchestrator, summary, error) -> None:
+def test_provider_errors_exit_with_code_1(orchestrator, summary, error, message) -> None:
     orchestrator.fetch_article.side_effect = error
 
     result = run_cli(OPTIONS)
 
     assert result.exit_code == 1
     assert isinstance(result.exception, SystemExit)
-    assert NETWORK_ERROR in result.output
+    assert message in result.output
     summary.assert_not_called()
 
 
@@ -250,6 +256,16 @@ def test_network_failure_with_real_adapters_exits_with_code_1() -> None:
     assert result.exit_code == 1
     assert isinstance(result.exception, SystemExit)
     assert NETWORK_ERROR in result.output
+
+
+def test_slow_wikipedia_with_real_adapters_exits_with_code_1() -> None:
+    with patch(GET, side_effect=requests.Timeout("read timed out")):
+        result = run_cli(OPTIONS)
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert WIKIPEDIA_SLOW in result.output
+    assert "read timed out" not in result.output
 
 
 def test_full_flow_with_real_adapters_searches_spanish_wikipedia(summary) -> None:
@@ -302,14 +318,20 @@ def test_enriched_text_is_shown_and_exported(orchestrator, summary) -> None:
     assert exported_content.ai_summary == AI_TEXT
 
 
-@pytest.mark.parametrize("error", [EnrichmentError("no token"), ProviderTimeoutError("slow")])
-def test_ai_failure_shows_a_message_and_keeps_going(orchestrator, summary, error) -> None:
+@pytest.mark.parametrize(
+    ("error", "message"),
+    [
+        (EnrichmentError("no token"), "No he podido enriquecer el texto con IA"),
+        (ProviderTimeoutError("slow"), AI_SLOW),
+    ],
+)
+def test_ai_failure_shows_a_message_and_keeps_going(orchestrator, summary, error, message) -> None:
     orchestrator.enrich_article.side_effect = error
 
     result = run_cli(OPTIONS, "Y\nT\napuntes\n")
 
     assert result.exit_code == 0, result.output
-    assert "No he podido enriquecer el texto con IA" in result.output
+    assert message in result.output
     assert "Texto enriquecido con IA" not in result.output
     exported_content = orchestrator.export_document.call_args.args[0]
     assert exported_content.ai_summary == ""

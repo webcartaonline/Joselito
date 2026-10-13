@@ -11,7 +11,11 @@ from rich.table import Table
 
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.bootstrap import build_orchestrator
-from wiki_enrichment.domain.exceptions import ResourceNotFoundError, WikiEnrichmentError
+from wiki_enrichment.domain.exceptions import (
+    ProviderTimeoutError,
+    ResourceNotFoundError,
+    WikiEnrichmentError,
+)
 from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
 
 WIKIPEDIA_LANGUAGE = "es"
@@ -30,6 +34,13 @@ ENRICH_ERROR = (
     "No he podido enriquecer el texto con IA. Revisa que tienes HF_TOKEN en el archivo "
     ".env, que tu cuenta de Hugging Face tiene créditos y que hay conexión a internet. "
     "El documento se guardará sin el texto enriquecido."
+)
+ENRICH_TIMEOUT_ERROR = (
+    "La IA está tardando demasiado en responder. Inténtalo de nuevo más tarde. "
+    "El documento se guardará sin el texto enriquecido."
+)
+WIKIPEDIA_TIMEOUT_ERROR = (
+    "Wikipedia está tardando demasiado en responder. Inténtalo de nuevo en unos minutos."
 )
 EXTENSIONS = {"PDF": ".pdf", "TXT": ".txt"}
 EXPORT_FOLDER = "output"
@@ -128,6 +139,10 @@ def research_topic(
             print()
             show_error(f"No he encontrado nada sobre '{topic}' en Wikipedia. Prueba con otro tema.")
             topic = ask_text(TOPIC_QUESTION)
+        except ProviderTimeoutError:
+            print()
+            show_error(WIKIPEDIA_TIMEOUT_ERROR)
+            raise typer.Exit(code=1)
         except WikiEnrichmentError:
             print()
             show_error("No he podido conectar con Wikipedia. Revisa tu conexión a internet e inténtalo más tarde.")
@@ -180,6 +195,10 @@ def enrich_article(orchestrator: WikiEnrichmentOrchestrator, article: ArticleCon
             ("Enriqueciendo con IA...", lambda: orchestrator.enrich_article(article)),
         ])
         return enriched.ai_summary
+    except ProviderTimeoutError:
+        print()
+        show_error(ENRICH_TIMEOUT_ERROR)
+        return ""
     except WikiEnrichmentError:
         print()
         show_error(ENRICH_ERROR)
