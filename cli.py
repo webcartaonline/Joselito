@@ -1,3 +1,4 @@
+import os
 import time
 from typing import Callable, Optional
 
@@ -12,7 +13,7 @@ from rich.table import Table
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.bootstrap import build_orchestrator
 from wiki_enrichment.domain.exceptions import ResourceNotFoundError, WikiEnrichmentError
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from wiki_enrichment.domain.models import ArticleContent, BriefSummary, EnrichedContent
 
 WIKIPEDIA_LANGUAGE = "es"
 BANNER_FONT = "larry3d"
@@ -20,8 +21,10 @@ PENDING_STEP_SECONDS = 1
 
 TOPIC_QUESTION = "¿Qué tema quieres investigar?"
 LANGUAGE_QUESTION = "¿A qué idioma quieres traducirlo?"
+SUMMARY_QUESTION = "¿Quieres un resumen breve? (Y/N)"
 EXPORT_QUESTION = "¿Quieres exportar la investigación? (Y/N)"
 FORMAT_QUESTION = "¿PDF (P) o TXT (T)?"
+SUMMARY_FORMAT_QUESTION = "¿Resumen en PDF (P) o TXT (T)?"
 FILE_NAME_QUESTION = "¿Con qué nombre quieres guardar el archivo?"
 
 YES, NO = "Y", "N"
@@ -31,8 +34,13 @@ ENRICH_ERROR = (
     ".env, que tu cuenta de Hugging Face tiene créditos y que hay conexión a internet. "
     "El documento se guardará sin el texto enriquecido."
 )
+SUMMARY_ERROR = (
+    "No he podido generar el resumen breve. Revisa que tienes HF_TOKEN en el archivo "
+    ".env y que hay conexión a internet. El documento se guardará sin resumen."
+)
 EXTENSIONS = {"PDF": ".pdf", "TXT": ".txt"}
 EXPORT_FOLDER = "output"
+SUMMARY_SUFFIX = "_summary"
 NOT_EXPORTED = "No"
 NO_FILE = "-"
 
@@ -212,20 +220,76 @@ def build_content(
     )
 
 
+class BriefSummaryFlow:
+    """Handle the optional brief summary in the terminal."""
+
+    def __init__(self, orchestrator: WikiEnrichmentOrchestrator) -> None:
+        """Keep the orchestrator that summarizes and translates the text."""
+        self._orchestrator = orchestrator
+
+    def request(
+        self, content: EnrichedContent, language: str
+    ) -> Optional[BriefSummary]:
+        """Ask for a brief summary, generate it and show it before exporting."""
+        if ask_option(SUMMARY_QUESTION, [YES, NO]) == NO:
+            return None
+        try:
+            print()
+            [summary] = run_steps([(
+                f"Resumiendo y traduciendo a {language}...",
+                lambda: self._orchestrator.summarize(content, language),
+            )])
+        except WikiEnrichmentError:
+            print()
+            show_error(SUMMARY_ERROR)
+            return None
+        self.show(summary)
+        return summary
+
+    @staticmethod
+    def show(summary: BriefSummary) -> None:
+        """Show the translated summary in a panel."""
+        print()
+        console.print(
+            Panel(summary.translated_text, title=f"Resumen breve de {summary.title}", border_style="blue")
+        )
+
+    @staticmethod
+    def ask_format() -> str:
+        """Ask in which format the summary is saved, apart from the enriched text."""
+        return EXPORT_FORMATS[ask_option(SUMMARY_FORMAT_QUESTION, EXPORT_FORMATS)]
+
+
+def summary_path(path: str, summary_format: str) -> str:
+    """Return the summary path, next to the enriched text file."""
+    base, _ = os.path.splitext(path)
+    return f"{base}{SUMMARY_SUFFIX}{EXTENSIONS[summary_format]}"
+
+
 def export_research(
-    orchestrator: WikiEnrichmentOrchestrator, content: EnrichedContent
+    orchestrator: WikiEnrichmentOrchestrator,
+    content: EnrichedContent,
+    summary: Optional[BriefSummary] = None,
 ) -> tuple[str, str]:
     if ask_option(EXPORT_QUESTION, [YES, NO]) == NO:
         return NOT_EXPORTED, NO_FILE
     export_format = EXPORT_FORMATS[ask_option(FORMAT_QUESTION, EXPORT_FORMATS)]
     file_name = ask_file_name(export_format)
     path = f"{EXPORT_FOLDER}/{file_name}"
+    steps: list[Step] = [(
+        f"Exportando {file_name}...",
+        lambda: orchestrator.export_document(content, export_format, path),
+    )]
+    if summary:
+        summary_format = BriefSummaryFlow.ask_format()
+        summary_file = summary_path(path, summary_format)
+        steps.append((
+            f"Exportando {os.path.basename(summary_file)}...",
+            lambda: orchestrator.export_summary(summary, summary_format, summary_file),
+        ))
     try:
         print()
-        run_steps([(
-            f"Exportando {file_name}...",
-            lambda: orchestrator.export_document(content, export_format, path),
-        )])
+        run_steps(steps)
     except WikiEnrichmentError:
         print()
         show_error("No he podido guardar el archivo. Revisa que tienes permisos y espacio en disco.")
@@ -273,7 +337,10 @@ def main(
         show_enriched(ai_summary)
     translated_summary = translate_text(language)
     content = build_content(article, ai_summary, translated_summary)
-    export_format, file_name = export_research(orchestrator, content)
+    summary = None
+    if ai_summary:
+        summary = BriefSummaryFlow(orchestrator).request(content, language)
+    export_format, file_name = export_research(orchestrator, content, summary)
 
     show_summary(topic, language, export_format, file_name)
     say_goodbye()
