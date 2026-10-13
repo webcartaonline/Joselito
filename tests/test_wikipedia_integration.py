@@ -12,6 +12,7 @@ from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.domain.models import EnrichedContent
 from wiki_enrichment.domain.ports import (
     ContentEnricher,
+    ContentSummarizer,
     DocumentExporter,
     Translator,
 )
@@ -32,7 +33,11 @@ def test_orchestrator_runs_with_real_wikipedia_adapter(mock_get) -> None:
     exporter = create_autospec(DocumentExporter, instance=True)
 
     orchestrator = WikiEnrichmentOrchestrator(
-        WikipediaSourceAdapter(), enricher, translator, exporter
+        WikipediaSourceAdapter(),
+        enricher,
+        translator,
+        exporter,
+        create_autospec(ContentSummarizer, instance=True),
     )
     result = orchestrator.execute("python", "es", "output/article")
 
