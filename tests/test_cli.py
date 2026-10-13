@@ -24,6 +24,7 @@ from wiki_enrichment.domain.exceptions import (
     WikiEnrichmentError,
 )
 from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from wiki_enrichment.domain.ports import ContentSummarizer
 from wiki_enrichment.infrastructure.exporters import EMPTY_SECTION_TEXT, DocumentExporterAdapter
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
@@ -277,6 +278,7 @@ def test_full_flow_creates_a_real_file_with_simulated_data(
         FakeContentEnricher(),
         FakeTranslator(),
         DocumentExporterAdapter(),
+        create_autospec(ContentSummarizer, instance=True),
     )
     monkeypatch.setattr(cli, "EXPORT_FOLDER", str(tmp_path))
 
