@@ -19,3 +19,7 @@ class EnrichmentError(WikiEnrichmentError):
 
 class ExportError(WikiEnrichmentError):
     """Raised when a document cannot be saved."""
+
+
+class SummarizationError(EnrichmentError):
+    """Raised when the brief summary cannot be generated."""
