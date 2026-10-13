@@ -9,7 +9,7 @@ from wiki_enrichment import bootstrap
 from wiki_enrichment.domain.exceptions import EnrichmentError
 from wiki_enrichment.infrastructure.ai import NO_PROVIDER_REASON, AIContentEnricher
 from wiki_enrichment.infrastructure.huggingface_enricher import HuggingFaceEnricher
-
+from wiki_enrichment.infrastructure.huggingface_summarizer import HuggingFaceSummarizer
 CLIENT_TARGET = "wiki_enrichment.infrastructure.huggingface_enricher.InferenceClient"
 
 
@@ -49,3 +49,16 @@ def test_without_token_the_fallback_explains_the_problem(monkeypatch) -> None:
 def test_fallback_enricher_has_a_default_reason() -> None:
     with pytest.raises(EnrichmentError, match=NO_PROVIDER_REASON):
         AIContentEnricher().enrich(make_article())
+
+
+@patch(CLIENT_TARGET)
+def test_uses_hugging_face_summarizer_with_the_default_model_when_there_is_a_token(
+    _client, monkeypatch
+) -> None:
+    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
+    monkeypatch.delenv(bootstrap.HF_SUMMARIZER_MODEL_VARIABLE, raising=False)
+
+    summarizer = bootstrap.build_brief_summarizer()
+
+    assert isinstance(summarizer, HuggingFaceSummarizer)
+    assert summarizer._model == bootstrap.DEFAULT_HF_SUMMARIZER_MODEL
