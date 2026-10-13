@@ -287,6 +287,38 @@ def test_provider_errors_exit_with_code_1(orchestrator, summary, error, message)
     summary.assert_not_called()
 
 
+def test_unexpected_error_shows_a_message_instead_of_crashing(orchestrator, summary) -> None:
+    orchestrator.fetch_article.side_effect = ZeroDivisionError("division by zero")
+
+    result = run_cli(OPTIONS)
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert "Ha ocurrido un error inesperado" in result.output
+    assert "division by zero" not in result.output
+    summary.assert_not_called()
+
+
+@pytest.mark.parametrize("cancel", [KeyboardInterrupt(), EOFError()])
+def test_cancelling_shows_a_message_instead_of_crashing(orchestrator, summary, cancel) -> None:
+    orchestrator.fetch_article.side_effect = cancel
+
+    result = run_cli(OPTIONS)
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert "Has cancelado la investigación" in result.output
+    summary.assert_not_called()
+
+
+def test_closing_the_input_while_asking_shows_a_message(orchestrator, summary) -> None:
+    result = run_cli(user_input="")
+
+    assert result.exit_code == 1
+    assert "Has cancelado la investigación" in result.output
+    orchestrator.fetch_article.assert_not_called()
+
+
 def test_network_failure_with_real_adapters_exits_with_code_1() -> None:
     with patch(GET, side_effect=requests.ConnectionError("no internet")):
         result = run_cli(OPTIONS)

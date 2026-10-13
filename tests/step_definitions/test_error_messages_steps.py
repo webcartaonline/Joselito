@@ -9,6 +9,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 import re
+from types import SimpleNamespace
 
 import cli
 from tests.helpers.fake_adapters import (
@@ -24,7 +25,9 @@ from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
 REQUESTS_GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
 LANGUAGE = "inglés"
 NO_EXPORT = "N\n"
-TECHNICAL_WORDS = ["Traceback", "Exception", "Error:", "timed out", "Max retries"]
+TECHNICAL_WORDS = [
+    "Traceback", "Exception", "Error:", "timed out", "Max retries", "division by zero",
+]
 VALID_TOPIC = "Python"
 REPEATED_TEXT = re.compile(r"\((?P<count>\d+) (?P<text>\w)\)")
 
@@ -94,6 +97,28 @@ def run_app(context, options: list[str], user_input: str) -> None:
         REQUESTS_GET, side_effect=context.get("http_failure")
     ):
         context["result"] = runner.invoke(cli.app, options, input=user_input)
+
+
+@given("an unexpected error happens while searching")
+def unexpected_error(context) -> None:
+    """Simulate a bug that nobody expected."""
+    context["wikipedia"] = MagicMock()
+    context["wikipedia"].fetch_article.side_effect = ZeroDivisionError("division by zero")
+
+
+@given("the user presses Ctrl+C while searching")
+def user_cancels(context) -> None:
+    """Simulate the user stopping the app in the middle of the search."""
+    context["wikipedia"] = MagicMock()
+    context["wikipedia"].fetch_article.side_effect = KeyboardInterrupt()
+
+
+@given("the AI returns a broken answer")
+def broken_ai_answer(context) -> None:
+    """Use the real Hugging Face adapter with a client that answers nothing."""
+    client = MagicMock()
+    client.chat_completion.return_value = SimpleNamespace(choices=[])
+    context["enricher"] = HuggingFaceEnricher(model="test/model", client=client)
 
 
 @when(parsers.parse('I research "{topic}"'))

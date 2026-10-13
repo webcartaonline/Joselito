@@ -90,6 +90,23 @@ def test_enrich_raises_error_on_empty_summary(content) -> None:
         enricher.enrich(make_article())
 
 
+@pytest.mark.parametrize(
+    "response",
+    [
+        SimpleNamespace(choices=[]),
+        SimpleNamespace(choices=None),
+        SimpleNamespace(choices=[SimpleNamespace()]),
+    ],
+)
+def test_enrich_raises_error_on_invalid_response(response) -> None:
+    """Raise an enrichment error instead of crashing on a broken response."""
+    client = MagicMock()
+    client.chat_completion.return_value = response
+
+    with pytest.raises(EnrichmentError, match="invalid response"):
+        HuggingFaceEnricher(model=MODEL, client=client).enrich(make_article())
+
+
 def test_enrich_maps_timeout_to_provider_timeout_error() -> None:
     """Map a provider timeout to the domain timeout error."""
     client = make_client()

@@ -70,7 +70,10 @@ class HuggingFaceEnricher:
         except Exception as error:
             raise EnrichmentError(f"AI enrichment failed: {error}") from error
 
-        summary = (response.choices[0].message.content or "").strip()
+        try:
+            summary = (response.choices[0].message.content or "").strip()
+        except (AttributeError, IndexError, TypeError) as error:
+            raise EnrichmentError("The AI provider returned an invalid response.") from error
         if not summary:
             raise EnrichmentError("The AI provider returned an empty summary.")
 

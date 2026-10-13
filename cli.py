@@ -44,6 +44,11 @@ ENRICH_TIMEOUT_ERROR = (
 WIKIPEDIA_TIMEOUT_ERROR = (
     "Wikipedia está tardando demasiado en responder. Inténtalo de nuevo en unos minutos."
 )
+CANCELLED_MESSAGE = "Has cancelado la investigación. Puedes volver a empezar cuando quieras."
+UNEXPECTED_ERROR = (
+    "Ha ocurrido un error inesperado y no he podido continuar. "
+    "Inténtalo de nuevo y, si se repite, avisa al equipo."
+)
 EXTENSIONS = {"PDF": ".pdf", "TXT": ".txt"}
 EXPORT_FOLDER = "output"
 NOT_EXPORTED = "No"
@@ -304,12 +309,8 @@ def say_goodbye() -> None:
     show_banner("Ha sido un placer")
 
 
-@app.command()
-def main(
-    tema: Optional[str] = typer.Option(None, help="Tema a investigar"),
-    idioma: Optional[str] = typer.Option(None, help="Idioma de la traducción"),
-):
-    """Joselito: investiga un tema en Wikipedia, lo enriquece y lo traduce."""
+def run_app(tema: Optional[str], idioma: Optional[str]) -> None:
+    """Run the whole research, from the greeting to the goodbye."""
     show_banner("Hola, soy")
     show_banner("Joselito")
 
@@ -328,6 +329,26 @@ def main(
 
     show_summary(topic, language, export_format, file_name)
     say_goodbye()
+
+
+@app.command()
+def main(
+    tema: Optional[str] = typer.Option(None, help="Tema a investigar"),
+    idioma: Optional[str] = typer.Option(None, help="Idioma de la traducción"),
+):
+    """Joselito: investiga un tema en Wikipedia, lo enriquece y lo traduce."""
+    try:
+        run_app(tema, idioma)
+    except typer.Exit:
+        raise
+    except (KeyboardInterrupt, EOFError):
+        print()
+        show_error(CANCELLED_MESSAGE)
+        raise typer.Exit(code=1)
+    except Exception:
+        print()
+        show_error(UNEXPECTED_ERROR)
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

@@ -44,3 +44,24 @@ Feature: Clear messages when something fails (US 8.4)
       | language | message                  |
       |          | No has escrito nada      |
       | 123      | no es un idioma válido   |
+
+  Scenario: An unexpected error does not close the app abruptly (CA4)
+    Given an unexpected error happens while searching
+    When I research "Python"
+    Then I see the message "Ha ocurrido un error inesperado"
+    And I do not see any technical error
+    And the application ends in a controlled way
+
+  Scenario: The user cancels with Ctrl+C (CA4)
+    Given the user presses Ctrl+C while searching
+    When I research "Python"
+    Then I see the message "Has cancelado la investigación"
+    And I do not see any technical error
+    And the application ends in a controlled way
+
+  Scenario: The AI returns a broken answer (CA4)
+    Given the AI returns a broken answer
+    When I research "Python"
+    Then I see the message "No he podido enriquecer el texto con IA"
+    And I do not see any technical error
+    And the application finishes normally
