@@ -1,5 +1,8 @@
 """Unit tests for the Wikipedia source adapter with mocked HTTP."""
 
+import logging
+from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -20,12 +23,41 @@ from wiki_enrichment.domain.exceptions import (
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
+from wiki_enrichment.infrastructure.logging_config import (
+    DEFAULT_RUN_ID,
+    LOGGER_NAME,
+    configure_logging,
+    set_run_id,
+)
 from wiki_enrichment.infrastructure.wikipedia import (
     HEADERS,
     MAX_PARAGRAPHS,
     REQUEST_TIMEOUT_SECONDS,
     WikipediaSourceAdapter,
 )
+
+LOG_FILE = Path("logs") / "app.log"
+
+
+@pytest.fixture
+def log_workspace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Iterator[Path]:
+    """Run a test in a temporary directory with a clean logger."""
+
+    logger = logging.getLogger(LOGGER_NAME)
+    monkeypatch.chdir(tmp_path)
+    set_run_id(DEFAULT_RUN_ID)
+    yield tmp_path
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
+
+
+def read_log(workspace: Path) -> str:
+    """Return the contents of the application log file."""
+
+    return (workspace / LOG_FILE).read_text(encoding="utf-8")
 
 
 @patch(REQUEST_TARGET)
@@ -253,3 +285,58 @@ def test_fetch_article_uses_configured_language(mock_http_get) -> None:
     assert mock_http_get.call_args_list[0].args[0].startswith(
         "https://es.wikipedia.org"
     )
+
+
+def test_fetch_article_logs_milestones(log_workspace: Path, mock_http_get) -> None:
+    """A successful fetch logs the search and the ready article."""
+    mock_http_get.side_effect = [make_search_response(), make_article_response()]
+    configure_logging()
+
+    WikipediaSourceAdapter().fetch_article("python")
+
+    content = read_log(log_workspace)
+    assert "Searching Wikipedia" in content
+    assert "Article ready" in content
+    assert "python" in content
+
+
+def test_fetch_article_logs_the_language(log_workspace: Path, mock_http_get) -> None:
+    """The configured language appears in the log."""
+    mock_http_get.side_effect = [
+        make_search_response("Agujero negro"),
+        make_article_response(build_article_html(["Un párrafo."])),
+    ]
+    configure_logging()
+
+    WikipediaSourceAdapter(language="es").fetch_article("agujero negro")
+
+    assert "language=es" in read_log(log_workspace)
+
+
+def test_debug_details_are_hidden_at_info_level(
+    log_workspace: Path, mock_http_get
+) -> None:
+    """Request details are not written when the level is INFO."""
+    mock_http_get.side_effect = [make_search_response(), make_article_response()]
+    configure_logging()
+
+    WikipediaSourceAdapter().fetch_article("python")
+
+    content = read_log(log_workspace)
+    assert "Search request finished" not in content
+    assert "Article downloaded" not in content
+
+
+def test_debug_details_are_logged_at_debug_level(
+    log_workspace: Path, mock_http_get
+) -> None:
+    """Request details are written when the level is DEBUG."""
+    mock_http_get.side_effect = [make_search_response(), make_article_response()]
+    configure_logging("DEBUG")
+
+    WikipediaSourceAdapter().fetch_article("python")
+
+    content = read_log(log_workspace)
+    assert "Search request finished" in content
+    assert "Article selected" in content
+    assert "Article downloaded" in content
