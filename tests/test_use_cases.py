@@ -6,6 +6,7 @@ import pytest
 
 from tests.helpers.content_mocks import make_article, make_enriched
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
+from wiki_enrichment.domain.models import BriefSummary
 from wiki_enrichment.domain.ports import (
     ContentEnricher,
     ContentSummarizer,
@@ -148,3 +149,61 @@ def test_enrich_article_only_calls_the_enricher() -> None:
     translator.translate.assert_not_called()
     exporter.export_txt.assert_not_called()
     exporter.export_pdf.assert_not_called()
+
+
+def test_summarize_summarizes_the_enriched_text_and_translates_it() -> None:
+    """The brief summary comes from the enriched text and is translated once."""
+
+    article = make_article(title="Python", paragraphs=["A programming language."])
+    content = make_enriched(article, "A long enriched text.")
+    summarizer = create_autospec(ContentSummarizer, instance=True)
+    translator = create_autospec(Translator, instance=True)
+    summarizer.summarize.return_value = "A brief summary."
+    translator.translate.return_value = "Un resumen breve."
+    orchestrator = WikiEnrichmentOrchestrator(
+        create_autospec(WikipediaSource, instance=True),
+        create_autospec(ContentEnricher, instance=True),
+        translator,
+        create_autospec(DocumentExporter, instance=True),
+        summarizer,
+    )
+
+    result = orchestrator.summarize(content, "es")
+
+    assert result == BriefSummary("Python", "A brief summary.", "Un resumen breve.")
+    summarizer.summarize.assert_called_once_with("A long enriched text.")
+    translator.translate.assert_called_once_with("A brief summary.", "es")
+
+
+@pytest.mark.parametrize(
+    ("export_format", "path", "called", "not_called"),
+    [
+        ("TXT", "output/notes_summary.txt", "export_summary_txt", "export_summary_pdf"),
+        ("PDF", "output/notes_summary.pdf", "export_summary_pdf", "export_summary_txt"),
+    ],
+)
+def test_export_summary_exports_only_the_chosen_format(
+    export_format, path, called, not_called
+) -> None:
+    """Choosing a format exports the summary as a single document."""
+
+    summary = BriefSummary("Python", "Brief.", "Resumen.")
+    orchestrator, exporter = make_orchestrator_with_exporter()
+
+    orchestrator.export_summary(summary, export_format, path)
+
+    getattr(exporter, called).assert_called_once_with(summary, path)
+    getattr(exporter, not_called).assert_not_called()
+
+
+def test_export_summary_rejects_unknown_formats() -> None:
+    """An unsupported format raises an error and exports nothing."""
+
+    summary = BriefSummary("Python", "Brief.", "Resumen.")
+    orchestrator, exporter = make_orchestrator_with_exporter()
+
+    with pytest.raises(ValueError, match="DOCX"):
+        orchestrator.export_summary(summary, "DOCX", "output/notes.docx")
+
+    exporter.export_summary_txt.assert_not_called()
+    exporter.export_summary_pdf.assert_not_called()
