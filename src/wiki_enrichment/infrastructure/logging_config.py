@@ -7,6 +7,7 @@ import time
 from contextvars import ContextVar
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from types import TracebackType
 from uuid import uuid4
 
 LOGGER_NAME = "wiki_enrichment"
@@ -30,9 +31,16 @@ HUGGING_FACE_TOKEN_PATTERN = re.compile(r"hf_[A-Za-z0-9]{8,}")
 
 
 class UtcFormatter(logging.Formatter):
-    """Formatter that renders timestamps in UTC instead of local time."""
+    """Formatter that renders UTC timestamps and redacts exception text."""
 
     converter = time.gmtime
+
+    def formatException(
+        self, exc_info: tuple[type[BaseException], BaseException, TracebackType | None]
+    ) -> str:
+        """Return the traceback with sensitive values removed."""
+
+        return redact_sensitive_data(super().formatException(exc_info))
 
 
 def generate_run_id() -> str:
