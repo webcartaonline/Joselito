@@ -29,6 +29,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+
 # Test and coverage artifacts
 .pytest_cache/
 .mypy_cache/
@@ -62,3 +63,6 @@ Desktop.ini
 
 # Local tool state
 .python-version
+
+diagnostico_env.py
+prueba_hf.py
