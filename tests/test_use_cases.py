@@ -151,15 +151,14 @@ def test_enrich_article_only_calls_the_enricher() -> None:
     exporter.export_pdf.assert_not_called()
 
 
-def test_summarize_summarizes_the_enriched_text_and_translates_it() -> None:
-    """The brief summary comes from the enriched text and is translated once."""
+def test_summarize_summarizes_the_enriched_text_without_translating() -> None:
+    """The brief summary comes from the enriched text and is not translated."""
 
     article = make_article(title="Python", paragraphs=["A programming language."])
     content = make_enriched(article, "A long enriched text.")
     summarizer = create_autospec(ContentSummarizer, instance=True)
     translator = create_autospec(Translator, instance=True)
     summarizer.summarize.return_value = "A brief summary."
-    translator.translate.return_value = "Un resumen breve."
     orchestrator = WikiEnrichmentOrchestrator(
         create_autospec(WikipediaSource, instance=True),
         create_autospec(ContentEnricher, instance=True),
@@ -170,9 +169,9 @@ def test_summarize_summarizes_the_enriched_text_and_translates_it() -> None:
 
     result = orchestrator.summarize(content, "es")
 
-    assert result == BriefSummary("Python", "A brief summary.", "Un resumen breve.")
+    assert result == BriefSummary("Python", "A brief summary.", "")
     summarizer.summarize.assert_called_once_with("A long enriched text.")
-    translator.translate.assert_called_once_with("A brief summary.", "es")
+    translator.translate.assert_not_called()
 
 
 @pytest.mark.parametrize(

@@ -31,12 +31,12 @@ FILE_NAME_QUESTION = "¿Con qué nombre quieres guardar el archivo?"
 YES, NO = "Y", "N"
 EXPORT_FORMATS = {"P": "PDF", "T": "TXT"}
 ENRICH_ERROR = (
-    "No he podido enriquecer el texto con IA. Revisa que tienes HF_TOKEN en el archivo "
-    ".env, que tu cuenta de Hugging Face tiene créditos y que hay conexión a internet. "
+    "No he podido enriquecer el texto con IA. Revisa que tienes DEEPSEEK_API_KEY en el archivo "
+    ".env, que tu cuenta de DeepSeek tiene saldo y que hay conexión a internet. "
     "El documento se guardará sin el texto enriquecido."
 )
 SUMMARY_ERROR = (
-    "No he podido generar el resumen breve. Revisa que tienes HF_TOKEN en el archivo "
+    "No he podido generar el resumen breve. Revisa que tienes DEEPSEEK_API_KEY en el archivo "
     ".env y que hay conexión a internet. El documento se guardará sin resumen."
 )
 EXTENSIONS = {"PDF": ".pdf", "TXT": ".txt"}
@@ -265,7 +265,7 @@ class BriefSummaryFlow:
         try:
             print()
             [summary] = run_steps([(
-                f"Resumiendo y traduciendo a {language}...",
+                "Resumiendo...",
                 lambda: self._orchestrator.summarize(content, language),
             )])
         except WikiEnrichmentError as error:
@@ -279,10 +279,10 @@ class BriefSummaryFlow:
 
     @staticmethod
     def show(summary: BriefSummary) -> None:
-        """Show the translated summary in a panel."""
+        """Show the brief summary in a panel."""
         print()
         console.print(
-            Panel(summary.translated_text, title=f"Resumen breve de {summary.title}", border_style="blue")
+            Panel(summary.text, title=f"Resumen breve de {summary.title}", border_style="blue")
         )
 
     @staticmethod

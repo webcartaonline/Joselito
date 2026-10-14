@@ -65,14 +65,12 @@ class WikiEnrichmentOrchestrator:
         exporters[export_format](content, path)
 
     def summarize(self, content: EnrichedContent, target_lang: str) -> BriefSummary:
-        """Generate a brief summary of the enriched text and translate it."""
+        """Generate a brief summary of the enriched text without translating it."""
 
         text = self._content_summarizer.summarize(content.ai_summary)
-        translated_text = self._translator.translate(text, target_lang)
         return BriefSummary(
             title=content.original_article.title,
             text=text,
-            translated_text=translated_text,
         )
 
     def export_summary(

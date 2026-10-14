@@ -35,7 +35,7 @@ def fast_plain_console(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_real_ai_token(monkeypatch):
-    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
 
 @pytest.fixture
@@ -76,7 +76,7 @@ def test_request_generates_and_shows_the_summary(monkeypatch, capsys) -> None:
 
     assert result == SUMMARY
     fake.summarize.assert_called_once_with(CONTENT, "inglés")
-    assert "Breve." in capsys.readouterr().out
+    assert "Brief." in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
