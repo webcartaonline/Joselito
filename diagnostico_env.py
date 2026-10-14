@@ -12,13 +12,19 @@ print(f"HF_TOKEN: {'CONFIGURADO (primeros 10 caracteres): ' + token[:10] + '...'
 print(f"HF_MODEL: {model}")
 print()
 
-# Verificar si el modelo es un nombre falso
-if model == 'openai/gpt-oss-120b':
-    print("❌ ALERTA: 'openai/gpt-oss-120b' NO ES UN MODELO REAL DE HUGGING FACE")
-    print("   → Solución: cambia a un modelo real como: Qwen/Qwen2.5-72B-Instruct")
+# Verificar el modelo configurado frente al valor por defecto del código.
+# El valor por defecto está en src/wiki_enrichment/bootstrap.py (DEFAULT_HF_MODEL)
+# y es el que usa el router de Hugging Face: un 402 significa que el modelo
+# es aceptado pero la cuenta no tiene créditos; "model_not_supported"
+# significa que el modelo no es válido en el router.
+DEFAULT_MODEL = 'openai/gpt-oss-120b'
+if model == DEFAULT_MODEL:
+    print(f"[OK] Modelo por defecto del proyecto: {model}")
+    print("   -> Si Hugging Face responde 402, el modelo es aceptado pero no hay creditos.")
 elif model == 'NO CONFIGURADO':
-    print("❌ ALERTA: No tienes HF_MODEL configurado")
-    print("   → El código usará 'openai/gpt-oss-120b' por defecto, que no existe")
-    print("   → Solución: agrega HF_MODEL=Qwen/Qwen2.5-72B-Instruct en tu .env")
+    print("[INFO] No tienes HF_MODEL configurado")
+    print(f"   -> El codigo usara '{DEFAULT_MODEL}' por defecto.")
 else:
-    print(f"✅ Modelo configurado: {model}")
+    print(f"[OK] Modelo configurado: {model}")
+    print("   -> Validalo con 'python prueba_hf.py': si responde 'model_not_supported',")
+    print("     ese modelo no es valido en el router.")
