@@ -9,6 +9,7 @@ from wiki_enrichment.domain.exceptions import ProviderTimeoutError, WikiEnrichme
 from wiki_enrichment.infrastructure.translation import (
     REQUEST_TIMEOUT_SECONDS,
     TRANSLATE_URL,
+    TRANSLATE_URL_V4,
     TranslationAdapter,
 )
 
@@ -28,7 +29,7 @@ def test_translate_posts_to_deeptranslate_and_returns_translation(monkeypatch) -
     assert result == "Hello world"
     post.assert_called_once_with(
         TRANSLATE_URL,
-        json={"q": "Hola mundo", "source": "es", "target": "en"},
+        json={"q": "Hola mundo", "source": "es", "target": "en", "format": "text"},
         headers={
             "x-rapidapi-key": "test-key",
             "x-rapidapi-host": "deep-translate1.p.rapidapi.com",
@@ -117,6 +118,61 @@ def test_translate_surfaces_provider_error_in_successful_http_response(monkeypat
     with patch(POST_TARGET, return_value=response):
         with pytest.raises(WikiEnrichmentError, match="DeepTranslate rejected the request"):
             TranslationAdapter().translate("Hola", "en")
+
+
+def test_translate_falls_back_to_deep_translate4_on_service_error(monkeypatch) -> None:
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    primary = MagicMock()
+    primary.json.return_value = {
+        "error": {
+            "code": 520,
+            "message": "Service Error",
+            "errors": [{"message": "Please retry your request"}],
+        }
+    }
+    fallback = MagicMock()
+    fallback.json.return_value = [200, "Hello"]
+
+    def post_side_effect(url, **kwargs):
+        if url == TRANSLATE_URL:
+            return primary
+        if url == TRANSLATE_URL_V4:
+            return fallback
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    with patch(POST_TARGET, side_effect=post_side_effect) as post:
+        result = TranslationAdapter().translate("Hola", "inglés")
+
+    assert result == "Hello"
+    assert post.call_count == 2
+    post.assert_any_call(
+        TRANSLATE_URL_V4,
+        data={"sl": "es", "tl": "en", "text": "Hola"},
+        headers={
+            "x-rapidapi-key": "test-key",
+            "x-rapidapi-host": "deep-translate4.p.rapidapi.com",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+
+
+def test_translate_deep_translate4_accepts_nested_google_style_response(monkeypatch) -> None:
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    primary = MagicMock()
+    primary.json.return_value = {"error": {"code": 520, "message": "Service Error"}}
+    fallback = MagicMock()
+    fallback.json.return_value = [[["Hello world", "Hola mundo", None, None, 3]]]
+
+    def post_side_effect(url, **kwargs):
+        if url == TRANSLATE_URL:
+            return primary
+        if url == TRANSLATE_URL_V4:
+            return fallback
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    with patch(POST_TARGET, side_effect=post_side_effect):
+        assert TranslationAdapter().translate("Hola mundo", "en") == "Hello world"
 
 
 @pytest.mark.parametrize(

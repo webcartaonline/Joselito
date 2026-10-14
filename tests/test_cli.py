@@ -228,5 +228,6 @@ def test_full_flow_with_adapters_translates_after_searching_spanish_wikipedia(
         "q": "Un lenguaje.",
         "source": "es",
         "target": "en",
+        "format": "text",
     }
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
