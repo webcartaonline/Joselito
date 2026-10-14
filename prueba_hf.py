@@ -16,8 +16,9 @@ if not token:
     print("Solución: agrega HF_TOKEN=tu_token_hf_... en tu archivo .env")
     exit(1)
 
-# Probar con modelo real (no el ficticio openai/gpt-oss-120b)
-model_to_test = model_env or 'Qwen/Qwen2.5-72B-Instruct'
+# Probar con el mismo modelo por defecto que usa el código
+# (src/wiki_enrichment/bootstrap.py: DEFAULT_HF_MODEL).
+model_to_test = model_env or 'openai/gpt-oss-120b'
 print(f"Probando con modelo: {model_to_test}")
 
 client = InferenceClient(api_key=token)
