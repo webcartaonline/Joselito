@@ -18,8 +18,10 @@ pip install -e .
 ## Uso
 
 La traducción necesita la variable de entorno `RAPIDAPI_KEY` con la clave de
-DeepTranslate. Configúrala en la terminal o en la configuración de ejecución de
-PyCharm antes de iniciar la aplicación. No guardes la clave en el repositorio.
+DeepTranslate. Puedes definirla en un archivo `.env` en la raíz del proyecto
+(UTF-8), exportarla en la terminal o configurarla en PyCharm antes de iniciar
+la aplicación. El arranque carga `.env` sin sobrescribir variables ya definidas.
+No guardes la clave en el repositorio.
 
 ```bash
 python cli.py
