@@ -66,8 +66,8 @@ def fast_plain_console(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_real_ai_token(monkeypatch):
-    """Never call the real AI from tests, even if a .env file has a token."""
-    monkeypatch.delenv("HF_TOKEN", raising=False)
+    """Never call the real AI from tests, even if a .env file has a key."""
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
 @pytest.fixture(autouse=True)
 def skip_summary_question(monkeypatch):
@@ -324,7 +324,7 @@ def test_ai_failure_shows_a_message_and_keeps_going(orchestrator, summary, error
 
 
 def test_real_adapters_without_token_still_export_the_original(tmp_path, monkeypatch, summary) -> None:
-    """Without HF_TOKEN the app warns about the AI and still saves the file."""
+    """Without DEEPSEEK_API_KEY the app warns about the AI and still saves the file."""
     responses = [
         make_response(json_data={"query": {"search": [{"title": "Python"}]}}),
         make_response(text='<div id="mw-content-text"><p>Un lenguaje.</p></div>'),

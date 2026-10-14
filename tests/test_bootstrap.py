@@ -1,7 +1,5 @@
 """Tests for the composition root that chooses the concrete adapters."""
 
-from unittest.mock import patch
-
 import pytest
 
 from tests.helpers.content_mocks import make_article
@@ -12,45 +10,39 @@ from wiki_enrichment.infrastructure.ai import (
     AIContentEnricher,
     AIContentSummarizer,
 )
-from wiki_enrichment.infrastructure.huggingface_enricher import HuggingFaceEnricher
-from wiki_enrichment.infrastructure.huggingface_summarizer import HuggingFaceSummarizer
-
-CLIENT_TARGET = "wiki_enrichment.infrastructure.huggingface_enricher.InferenceClient"
-SUMMARIZER_CLIENT_TARGET = (
-    "wiki_enrichment.infrastructure.huggingface_summarizer.InferenceClient"
-)
+from wiki_enrichment.infrastructure.deepseek_enricher import DeepSeekEnricher
+from wiki_enrichment.infrastructure.deepseek_summarizer import DeepSeekSummarizer
 
 
-@patch(CLIENT_TARGET)
-def test_uses_hugging_face_with_the_default_model_when_there_is_a_token(
-    _client, monkeypatch
+def test_uses_deepseek_with_the_default_model_when_there_is_a_key(
+    monkeypatch,
 ) -> None:
-    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
-    monkeypatch.delenv(bootstrap.HF_MODEL_VARIABLE, raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk_fake_key")
+    monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
 
     enricher = bootstrap.build_content_enricher()
 
-    assert isinstance(enricher, HuggingFaceEnricher)
-    assert enricher._model == bootstrap.DEFAULT_HF_MODEL
+    assert isinstance(enricher, DeepSeekEnricher)
+    assert enricher._model == "deepseek-chat"
 
 
-@patch(CLIENT_TARGET)
-def test_model_can_be_changed_from_the_environment(_client, monkeypatch) -> None:
-    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
-    monkeypatch.setenv(bootstrap.HF_MODEL_VARIABLE, "another/model")
+def test_enricher_model_can_be_changed_from_the_environment(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk_fake_key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-reasoner")
 
     enricher = bootstrap.build_content_enricher()
 
-    assert enricher._model == "another/model"
+    assert isinstance(enricher, DeepSeekEnricher)
+    assert enricher._model == "deepseek-reasoner"
 
 
-def test_without_token_the_fallback_explains_the_problem(monkeypatch) -> None:
-    monkeypatch.delenv("HF_TOKEN", raising=False)
+def test_without_key_the_fallback_explains_the_problem(monkeypatch) -> None:
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
     enricher = bootstrap.build_content_enricher()
 
     assert isinstance(enricher, AIContentEnricher)
-    with pytest.raises(EnrichmentError, match="HF_TOKEN"):
+    with pytest.raises(EnrichmentError, match="DEEPSEEK_API_KEY"):
         enricher.enrich(make_article())
 
 
@@ -59,53 +51,52 @@ def test_fallback_enricher_has_a_default_reason() -> None:
         AIContentEnricher().enrich(make_article())
 
 
-@patch(SUMMARIZER_CLIENT_TARGET)
-def test_summarizer_uses_the_default_model_when_there_is_a_token(
-    _client, monkeypatch
-) -> None:
-    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
-    monkeypatch.delenv(bootstrap.HF_SUMMARIZER_MODEL_VARIABLE, raising=False)
-    monkeypatch.delenv(bootstrap.HF_MODEL_VARIABLE, raising=False)
-
-    summarizer = bootstrap.build_content_summarizer()
-
-    assert isinstance(summarizer, HuggingFaceSummarizer)
-    assert summarizer._model == bootstrap.DEFAULT_HF_MODEL
-
-
-@patch(SUMMARIZER_CLIENT_TARGET)
-def test_summarizer_follows_the_enricher_model_from_the_environment(
-    _client, monkeypatch
-) -> None:
-    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
-    monkeypatch.delenv(bootstrap.HF_SUMMARIZER_MODEL_VARIABLE, raising=False)
-    monkeypatch.setenv(bootstrap.HF_MODEL_VARIABLE, "another/model")
-
-    summarizer = bootstrap.build_content_summarizer()
-
-    assert summarizer._model == "another/model"
-
-
-@patch(SUMMARIZER_CLIENT_TARGET)
-def test_summarizer_model_can_be_changed_from_the_environment(
-    _client, monkeypatch
-) -> None:
-    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
-    monkeypatch.setenv(bootstrap.HF_MODEL_VARIABLE, "another/model")
-    monkeypatch.setenv(bootstrap.HF_SUMMARIZER_MODEL_VARIABLE, "summary/model")
-
-    summarizer = bootstrap.build_content_summarizer()
-
-    assert summarizer._model == "summary/model"
-
-
-def test_without_token_the_summarizer_fallback_explains_the_problem(
+def test_summarizer_uses_the_default_model_when_there_is_a_key(
     monkeypatch,
 ) -> None:
-    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk_fake_key")
+    monkeypatch.delenv("DEEPSEEK_SUMMARIZER_MODEL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
+
+    summarizer = bootstrap.build_content_summarizer()
+
+    assert isinstance(summarizer, DeepSeekSummarizer)
+    assert summarizer._model == "deepseek-chat"
+
+
+def test_summarizer_follows_the_enricher_model_from_the_environment(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk_fake_key")
+    monkeypatch.delenv("DEEPSEEK_SUMMARIZER_MODEL", raising=False)
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-reasoner")
+
+    summarizer = bootstrap.build_content_summarizer()
+
+    assert isinstance(summarizer, DeepSeekSummarizer)
+    assert summarizer._model == "deepseek-reasoner"
+
+
+def test_summarizer_model_can_be_changed_from_the_environment(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk_fake_key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-chat")
+    monkeypatch.setenv("DEEPSEEK_SUMMARIZER_MODEL", "deepseek-reasoner")
+
+    summarizer = bootstrap.build_content_summarizer()
+
+    assert isinstance(summarizer, DeepSeekSummarizer)
+    assert summarizer._model == "deepseek-reasoner"
+
+
+def test_without_key_the_summarizer_fallback_explains_the_problem(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
     summarizer = bootstrap.build_content_summarizer()
 
     assert isinstance(summarizer, AIContentSummarizer)
-    with pytest.raises(SummarizationError, match="HF_TOKEN"):
+    with pytest.raises(SummarizationError, match="DEEPSEEK_API_KEY"):
         summarizer.summarize("Any text.")

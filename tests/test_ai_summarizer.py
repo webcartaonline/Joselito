@@ -16,5 +16,5 @@ def test_summarizer_fails_with_the_default_reason() -> None:
 def test_summarizer_fails_with_a_custom_reason() -> None:
     """The reason given at creation is the one shown to the user."""
 
-    with pytest.raises(SummarizationError, match="HF_TOKEN is not set"):
-        AIContentSummarizer("HF_TOKEN is not set").summarize("Any text.")
+    with pytest.raises(SummarizationError, match="DEEPSEEK_API_KEY is not set"):
+        AIContentSummarizer("DEEPSEEK_API_KEY is not set").summarize("Any text.")
