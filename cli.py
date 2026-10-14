@@ -1,5 +1,6 @@
 import os
 import time
+from pathlib import Path
 from typing import Callable, Optional
 
 import pyfiglet
@@ -40,6 +41,7 @@ SUMMARY_ERROR = (
 )
 EXTENSIONS = {"PDF": ".pdf", "TXT": ".txt"}
 EXPORT_FOLDER = "output"
+LAST_ERROR_FILE = "ultimo_error_ia.txt"
 SUMMARY_SUFFIX = "_summary"
 NOT_EXPORTED = "No"
 NO_FILE = "-"
@@ -62,6 +64,31 @@ def show_banner(text: str) -> None:
 
 def show_error(message: str) -> None:
     console.print(Panel(message, border_style="red", title="Error"))
+
+
+def resolve_export_path(file_name: str) -> str:
+    """Return the export path as an absolute path next to the repo root.
+
+    ``EXPORT_FOLDER`` may be overridden in tests with an absolute tmp path.
+    """
+    base = Path(EXPORT_FOLDER)
+    if not base.is_absolute():
+        base = Path(__file__).resolve().parent / base
+    return str(base / file_name)
+
+
+def log_ai_error(detail: str) -> str:
+    """Save the AI error detail so it is not lost after the long article panel.
+
+    Best effort: never raises. Returns the path used.
+    """
+    path = Path(resolve_export_path(LAST_ERROR_FILE))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(detail, encoding="utf-8")
+    except OSError:
+        pass
+    return str(path)
 
 
 class QuestionPrompt(Prompt):
@@ -190,7 +217,9 @@ def enrich_article(orchestrator: WikiEnrichmentOrchestrator, article: ArticleCon
         return enriched.ai_summary
     except WikiEnrichmentError as error:
         print()
-        show_error(f"{ENRICH_ERROR}\n\nDetalle: {error}")
+        detail = str(error)
+        error_path = log_ai_error(f"Enriquecimiento con IA fallido.\nDetalle: {detail}\n")
+        show_error(f"{ENRICH_ERROR}\n\nDetalle: {detail}\n\nHe guardado el detalle en {error_path}")
         return ""
 
 
@@ -241,7 +270,9 @@ class BriefSummaryFlow:
             )])
         except WikiEnrichmentError as error:
             print()
-            show_error(f"{SUMMARY_ERROR}\n\nDetalle: {error}")
+            detail = str(error)
+            error_path = log_ai_error(f"Resumen breve fallido.\nDetalle: {detail}\n")
+            show_error(f"{SUMMARY_ERROR}\n\nDetalle: {detail}\n\nHe guardado el detalle en {error_path}")
             return None
         self.show(summary)
         return summary
@@ -275,6 +306,9 @@ def export_research(
         return NOT_EXPORTED, NO_FILE
     export_format = EXPORT_FORMATS[ask_option(FORMAT_QUESTION, EXPORT_FORMATS)]
     file_name = ask_file_name(export_format)
+    # Se mantiene la ruta relativa ("output/...") porque los tests y el
+    # resumen la esperan así; para evitar abrir un TXT viejo, tras exportar
+    # se muestra la ruta absoluta real donde se escribió el archivo.
     path = f"{EXPORT_FOLDER}/{file_name}"
     steps: list[Step] = [(
         f"Exportando {file_name}...",
@@ -294,6 +328,7 @@ def export_research(
         print()
         show_error("No he podido guardar el archivo. Revisa que tienes permisos y espacio en disco.")
         return NOT_EXPORTED, NO_FILE
+    console.print(f"[dim]Archivo guardado en {Path(path).resolve()}[/]")
     return export_format, path
 
 

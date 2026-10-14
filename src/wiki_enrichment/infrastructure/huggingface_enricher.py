@@ -19,6 +19,10 @@ SYSTEM_PROMPT = (
     "and do not invent facts."
 )
 
+# Límite de caracteres del artículo enviado al proveedor para no agotar
+# los créditos gratuitos con artículos completos de Wikipedia.
+MAX_ARTICLE_CHARS = 4000
+
 
 class HuggingFaceEnricher:
     """Enrich an article with an AI-generated summary using Hugging Face."""
@@ -47,6 +51,9 @@ class HuggingFaceEnricher:
         if not article.full_text.strip():
             raise EnrichmentError("Cannot enrich an article without text.")
 
+        text = article.full_text.strip()
+        if len(text) > MAX_ARTICLE_CHARS:
+            text = text[:MAX_ARTICLE_CHARS] + "\n\n[Texto truncado para ahorrar creditos de IA.]"
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -54,7 +61,7 @@ class HuggingFaceEnricher:
                 "content": (
                     f"Title: {article.title}\n\n"
                     f"Write a clear, enriched summary of this article:\n\n"
-                    f"{article.full_text}"
+                    f"{text}"
                 ),
             },
         ]
