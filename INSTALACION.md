@@ -253,16 +253,14 @@ pip install -e ".[test]"
 
 ## 3. Poner tu clave de inteligencia artificial (solo una vez)
 
-Joselito usa una inteligencia artificial de **Hugging Face**. Para usarla necesita una **clave** (token), que es como una contraseña.
+Joselito usa la inteligencia artificial de **DeepSeek**. Para usarla necesita una **clave** (API key), que es como una contraseña.
 
 ### 3.1 Conseguir la clave
 
-1. Entra en https://huggingface.co y crea una cuenta (o inicia sesión).
-2. Arriba a la derecha, pulsa en tu foto → **Settings** → **Access Tokens**.
-3. Pulsa **Create new token**.
-4. Ponle un nombre (por ejemplo `joselito`) y **marca el permiso "Make calls to Inference Providers"**.
-5. Pulsa **Create token** y **copia** el texto que aparece (empieza por `hf_`).
-   ⚠️ Solo se muestra una vez. Si lo pierdes, tendrás que crear otro.
+1. Entra en https://platform.deepseek.com y crea una cuenta (o inicia sesión).
+2. Ve a **API keys** y pulsa **Create new API key**.
+3. **Copia** el texto que aparece (empieza por `sk-`).
+   ⚠️ Solo se muestra una vez. Si lo pierdes, tendrás que crear otra.
 
 ### 3.2 Guardar la clave en el proyecto
 
@@ -284,11 +282,11 @@ notepad .env
 
 **3) Cambia esta línea:**
 ```
-HF_TOKEN=your_token_here
+DEEPSEEK_API_KEY=your_deepseek_key_here
 ```
 por tu clave real, **sin espacios ni comillas**. Por ejemplo:
 ```
-HF_TOKEN=hf_AbCdEf123456
+DEEPSEEK_API_KEY=sk-AbCdEf123456
 ```
 
 **4) Guarda** con `Ctrl + S` y cierra el Bloc de notas.
@@ -485,7 +483,7 @@ python cli.py
 | `ModuleNotFoundError: No module named ...` | El entorno no está activado, o faltan librerías. | Comprueba que ves `(.venv)`. Si no, actívalo (paso 5). Si sí lo ves, repite la instalación de librerías (paso 2, último bloque). |
 | `fatal: destination path 'Joselito' already exists` | Ya descargaste el proyecto antes. | No hace falta volver a descargarlo. Entra con `cd Joselito` y sigue. |
 | `Repository not found` o pide contraseña al descargar | No tienes acceso al repositorio. | Pide al dueño del proyecto que te dé acceso en GitHub e inicia sesión con esa cuenta. |
-| Joselito dice que no ha podido enriquecer el texto con IA | Falla la clave o la conexión. | Revisa que `.env` tiene tu `HF_TOKEN` bien copiado (paso 3), que tienes internet y que tu cuenta de Hugging Face tiene créditos. |
+| Joselito dice que no ha podido enriquecer el texto con IA | Falla la clave o la conexión. | Revisa que `.env` tiene tu `DEEPSEEK_API_KEY` bien copiada (paso 3), que tienes internet y que tu cuenta de DeepSeek tiene saldo. Valida con `python prueba_deepseek.py`. |
 | En Git Bash no puedo pegar | `Ctrl + V` no funciona en Git Bash. | Usa `Shift + Insert` o clic derecho → *Paste*. |
 | No aparece `(.venv)` | El entorno no está activado. | Ejecuta el comando de activar de tu terminal (paso 5). |
 
