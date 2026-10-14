@@ -2,6 +2,8 @@
 
 import os
 
+from dotenv import load_dotenv
+
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.domain.exceptions import EnrichmentError
 from wiki_enrichment.domain.ports import ContentEnricher, ContentSummarizer
@@ -15,6 +17,10 @@ from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
 HF_MODEL_VARIABLE = "HF_MODEL"
 DEFAULT_HF_MODEL = "openai/gpt-oss-120b"
 HF_SUMMARIZER_MODEL_VARIABLE = "HF_SUMMARIZER_MODEL"
+
+# Cargar el .env lo antes posible: no sobrescribe variables ya existentes
+# en el entorno (Windows, PyCharm, VS Code), que tienen prioridad.
+load_dotenv()
 
 
 def build_content_enricher() -> ContentEnricher:
