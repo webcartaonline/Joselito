@@ -212,7 +212,7 @@ def test_full_flow_with_adapters_translates_after_searching_spanish_wikipedia(
         make_response(text='<div id="mw-content-text"><p>Un lenguaje.</p></div>'),
     ]
     translation_response = make_response(
-        json_data={"data": {"translations": {"translatedText": "A language."}}}
+        json_data={"data": {"translations": [{"translatedText": "A language."}]}}
     )
     monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
 
