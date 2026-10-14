@@ -188,9 +188,9 @@ def enrich_article(orchestrator: WikiEnrichmentOrchestrator, article: ArticleCon
             ("Enriqueciendo con IA...", lambda: orchestrator.enrich_article(article)),
         ])
         return enriched.ai_summary
-    except WikiEnrichmentError:
+    except WikiEnrichmentError as error:
         print()
-        show_error(ENRICH_ERROR)
+        show_error(f"{ENRICH_ERROR}\n\nDetalle: {error}")
         return ""
 
 
@@ -239,9 +239,9 @@ class BriefSummaryFlow:
                 f"Resumiendo y traduciendo a {language}...",
                 lambda: self._orchestrator.summarize(content, language),
             )])
-        except WikiEnrichmentError:
+        except WikiEnrichmentError as error:
             print()
-            show_error(SUMMARY_ERROR)
+            show_error(f"{SUMMARY_ERROR}\n\nDetalle: {error}")
             return None
         self.show(summary)
         return summary
