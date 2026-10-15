@@ -3,7 +3,8 @@
 from wiki_enrichment.domain.models import(
     ArticleContent,
     BriefSummary,
-    EnrichedContent
+    EnrichedContent,
+    SearchResult,
 )
 from wiki_enrichment.domain.ports import (
     ContentEnricher,
@@ -41,6 +42,16 @@ class WikiEnrichmentOrchestrator:
         """
 
         return self._wikipedia_source.fetch_article(topic)
+
+    def search_articles(self, topic: str) -> list[SearchResult]:
+        """Return the search results so the user can confirm or choose one."""
+
+        return self._wikipedia_source.search(topic)
+
+    def fetch_article_by_title(self, title: str) -> ArticleContent:
+        """Download only the article that the user has chosen."""
+
+        return self._wikipedia_source.fetch_article_by_title(title)
 
     def enrich_article(self, article: ArticleContent) -> EnrichedContent:
         """Enrich an already fetched article without translating or exporting it."""

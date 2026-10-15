@@ -17,6 +17,18 @@ class ArticleContent:
         return "\n\n".join(self.paragraphs)
 
 
+@dataclass(frozen=True, slots=True)
+class SearchResult:
+    """A Wikipedia search result: just enough to let the user choose an article.
+
+    Only the title and a short summary are kept, never the whole article,
+    so a list of results takes very little memory.
+    """
+
+    title: str
+    summary: str = ""
+
+
 @dataclass(frozen=True)
 class EnrichedContent:
     """An article together with its generated and translated summaries."""

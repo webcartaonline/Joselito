@@ -2,7 +2,12 @@
 
 from typing import Protocol
 
-from wiki_enrichment.domain.models import ArticleContent, BriefSummary, EnrichedContent
+from wiki_enrichment.domain.models import (
+    ArticleContent,
+    BriefSummary,
+    EnrichedContent,
+    SearchResult,
+)
 
 
 class WikipediaSource(Protocol):
@@ -10,6 +15,12 @@ class WikipediaSource(Protocol):
 
     def fetch_article(self, topic: str) -> ArticleContent:
         """Fetch an article for a topic."""
+
+    def search(self, topic: str) -> list[SearchResult]:
+        """Return the best results for a topic, each with a short summary."""
+
+    def fetch_article_by_title(self, title: str) -> ArticleContent:
+        """Fetch the article with exactly this title."""
 
 
 class ContentEnricher(Protocol):

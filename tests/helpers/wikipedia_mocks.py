@@ -22,6 +22,40 @@ def build_search_payload(title: str = DEFAULT_SEARCH_TITLE) -> dict[str, Any]:
     return {"query": {"search": [{"title": title}]}}
 
 
+def build_results_payload(
+    pages: list[tuple[str, str | None]], suggestion: str = ""
+) -> dict[str, Any]:
+    """Build a search-with-summaries payload like the real Wikipedia one.
+
+    Args:
+        pages: (title, summary) pairs in Wikipedia's order. A None summary
+            means Wikipedia does not offer one for that page.
+        suggestion: Wikipedia's "¿Quisiste decir...?" text, if any.
+
+    Returns:
+        A payload whose pages come in reverse order, as Wikipedia may do,
+        with an "index" field telling the real order.
+    """
+    if not pages and not suggestion:
+        return {"batchcomplete": True}
+    query: dict[str, Any] = {}
+    if suggestion:
+        query["searchinfo"] = {"suggestion": suggestion}
+    if pages:
+        query["pages"] = [
+            {"title": title, "index": index, **({"extract": summary} if summary is not None else {})}
+            for index, (title, summary) in reversed(list(enumerate(pages, start=1)))
+        ]
+    return {"batchcomplete": True, "query": query}
+
+
+def make_results_response(
+    pages: list[tuple[str, str | None]], suggestion: str = ""
+) -> MagicMock:
+    """Build a successful search-with-summaries response."""
+    return make_response(json_data=build_results_payload(pages, suggestion))
+
+
 def build_article_html(paragraphs: list[str]) -> str:
     """Build a minimal Wikipedia article body from paragraphs.
 

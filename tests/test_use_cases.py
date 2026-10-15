@@ -6,6 +6,7 @@ import pytest
 
 from tests.helpers.content_mocks import make_article, make_enriched
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
+from wiki_enrichment.domain.models import SearchResult
 from wiki_enrichment.domain.models import BriefSummary
 from wiki_enrichment.domain.ports import (
     ContentEnricher,
@@ -206,3 +207,24 @@ def test_export_summary_rejects_unknown_formats() -> None:
 
     exporter.export_summary_txt.assert_not_called()
     exporter.export_summary_pdf.assert_not_called()
+
+
+def test_search_articles_and_fetch_by_title_only_query_the_wikipedia_source() -> None:
+    """Searching and downloading the chosen article only use the Wikipedia port."""
+
+    article = make_article(title="Árbol")
+    results = [SearchResult("Árbol", "Una planta.")]
+    source = create_autospec(WikipediaSource, instance=True)
+    enricher = create_autospec(ContentEnricher, instance=True)
+    translator = create_autospec(Translator, instance=True)
+    exporter = create_autospec(DocumentExporter, instance=True)
+    summarizer = create_autospec(ContentSummarizer, instance=True)
+    source.search.return_value = results
+    source.fetch_article_by_title.return_value = article
+    orchestrator = WikiEnrichmentOrchestrator(source, enricher, translator, exporter, summarizer)
+
+    assert orchestrator.search_articles("Alboles") == results
+    assert orchestrator.fetch_article_by_title("Árbol") == article
+    source.search.assert_called_once_with("Alboles")
+    source.fetch_article_by_title.assert_called_once_with("Árbol")
+    enricher.enrich.assert_not_called()

@@ -2,7 +2,9 @@
 
 from tests.helpers.content_mocks import make_article
 from wiki_enrichment.domain.exceptions import WikiEnrichmentError
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from wiki_enrichment.domain.models import ArticleContent, EnrichedContent, SearchResult
+
+FAKE_SEARCH_SUMMARY = "A short summary from Wikipedia."
 
 
 class FakeWikipediaSource:
@@ -12,15 +14,35 @@ class FakeWikipediaSource:
         self,
         article: ArticleContent | None = None,
         failure: WikiEnrichmentError | None = None,
+        results: list[SearchResult] | None = None,
     ) -> None:
-        """Configure the article to return or the failure to raise."""
+        """Configure the article and search results to return or the failure to raise."""
         self._article = article if article is not None else make_article()
         self._failure = failure
+        self._results = (
+            results if results is not None
+            else [SearchResult(self._article.title, FAKE_SEARCH_SUMMARY)]
+        )
         self.requested_topics: list[str] = []
+        self.requested_titles: list[str] = []
 
     def fetch_article(self, topic: str) -> ArticleContent:
         """Record the topic and return the fixed article."""
         self.requested_topics.append(topic)
+        if self._failure is not None:
+            raise self._failure
+        return self._article
+
+    def search(self, topic: str) -> list[SearchResult]:
+        """Record the topic and return the fixed search results."""
+        self.requested_topics.append(topic)
+        if self._failure is not None:
+            raise self._failure
+        return self._results
+
+    def fetch_article_by_title(self, title: str) -> ArticleContent:
+        """Record the chosen title and return the fixed article."""
+        self.requested_titles.append(title)
         if self._failure is not None:
             raise self._failure
         return self._article
