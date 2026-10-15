@@ -59,6 +59,7 @@ def orchestrator():
     fake = create_autospec(WikiEnrichmentOrchestrator, instance=True)
     fake.search_articles.return_value = RESULTS
     fake.fetch_article_by_title.return_value = ARTICLE
+    fake.translate_article.return_value = "A programming language."
     fake.enrich_article.return_value = ENRICHED
     with patch("cli.build_orchestrator", return_value=fake):
         yield fake

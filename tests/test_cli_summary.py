@@ -21,7 +21,10 @@ from wiki_enrichment.domain.models import (
 )
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
-CONTENT = EnrichedContent(original_article=ARTICLE, ai_summary="Enriched text.")
+TRANSLATED = "A programming language."
+CONTENT = EnrichedContent(
+    original_article=ARTICLE, ai_summary="Enriched text.", translated_summary=TRANSLATED
+)
 SUMMARY = BriefSummary(title="Python", text="Brief.", translated_text="Breve.")
 OPTIONS = ["--tema", "Python", "--idioma", "inglés"]
 CONFIRM = "Y\n"  # Answer to "¿Era esto lo que buscabas?"
@@ -49,6 +52,7 @@ def orchestrator():
     fake = create_autospec(WikiEnrichmentOrchestrator, instance=True)
     fake.search_articles.return_value = [SearchResult("Python", "Un lenguaje.")]
     fake.fetch_article_by_title.return_value = ARTICLE
+    fake.translate_article.return_value = TRANSLATED
     fake.enrich_article.return_value = CONTENT
     fake.summarize.return_value = SUMMARY
     with patch("cli.build_orchestrator", return_value=fake):

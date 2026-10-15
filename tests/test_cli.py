@@ -44,9 +44,15 @@ SEARCH_PAYLOAD = {
     "query": {"pages": [{"title": "Python", "index": 1, "extract": "Un lenguaje."}]}
 }
 AI_TEXT = "Python es un lenguaje muy usado para aprender a programar."
+TRANSLATED = "Un lenguaje de programación."
 ENRICHED = EnrichedContent(original_article=ARTICLE, ai_summary=AI_TEXT)
-CONTENT = EnrichedContent(original_article=ARTICLE, ai_summary=AI_TEXT, translated_summary="")
+CONTENT = EnrichedContent(
+    original_article=ARTICLE,
+    ai_summary=AI_TEXT,
+    translated_summary=TRANSLATED,
+)
 GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
+TRANSLATION_POST = "wiki_enrichment.infrastructure.translation.requests.post"
 OPTIONS = ["--tema", "Python", "--idioma", "inglés"]
 EMPTY_TEXT_ERROR = "No has escrito nada. Inténtalo de nuevo."
 NETWORK_ERROR = "No he podido conectar con Wikipedia"
@@ -113,6 +119,7 @@ def orchestrator():
     fake.search_articles.return_value = RESULTS
     fake.fetch_article_by_title.return_value = ARTICLE
     fake.enrich_article.return_value = ENRICHED
+    fake.translate_article.return_value = TRANSLATED
     with patch("cli.build_orchestrator", return_value=fake):
         yield fake
 
@@ -147,6 +154,7 @@ def test_options_skip_the_topic_and_language_questions(orchestrator, summary) ->
     assert cli.LANGUAGE_QUESTION not in result.output
     orchestrator.search_articles.assert_called_once_with("Python")
     orchestrator.fetch_article_by_title.assert_called_once_with("Python")
+    orchestrator.translate_article.assert_called_once_with(ARTICLE, "inglés")
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
@@ -292,8 +300,30 @@ def test_successful_run_shows_article_summary_and_goodbye(orchestrator) -> None:
 
     assert result.exit_code == 0, result.output
     assert "A programming language." in result.output
+    assert TRANSLATED in result.output
     assert "Resumen" in result.output
     assert "Mi trabajo aquí ha terminado" in result.output
+
+
+def test_translator_timeout_is_reported_and_exits(orchestrator, summary) -> None:
+    orchestrator.translate_article.side_effect = ProviderTimeoutError("slow")
+
+    result = run_cli(OPTIONS, "Y\nN\n")
+
+    assert result.exit_code == 1
+    assert "Google Translate ha tardado demasiado" in result.output
+    summary.assert_not_called()
+
+
+def test_translation_failure_is_reported_and_exits(orchestrator, summary) -> None:
+    orchestrator.translate_article.side_effect = WikiEnrichmentError("provider unavailable")
+
+    result = run_cli(OPTIONS, "Y\nN\n")
+
+    assert result.exit_code == 1
+    assert "No he podido traducir el contenido con Google Translate" in result.output
+    assert "provider unavailable" in result.output
+    summary.assert_not_called()
 
 
 def test_empty_topic_is_asked_again(orchestrator, summary) -> None:
@@ -348,6 +378,25 @@ def test_language_error_rejects_invalid_languages(language) -> None:
 @pytest.mark.parametrize("language", ["inglés", "francés", "chino mandarín", "EN"])
 def test_language_error_accepts_valid_languages(language) -> None:
     assert cli.language_error(language) is None
+@pytest.mark.parametrize("negative", ["N", "n", "NO", "No", "no", "  no  "])
+def test_export_declined_with_common_negative_answers(
+    orchestrator, summary, negative
+) -> None:
+    result = run_cli(OPTIONS, f"Y\n{negative}\n")
+
+    assert result.exit_code == 0, result.output
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
+    orchestrator.export_document.assert_not_called()
+
+
+@pytest.mark.parametrize("affirmative", ["Y", "yes", "YES", "Sí", "si", "  Si  "])
+def test_export_accepted_with_common_affirmative_answers(
+    orchestrator, summary, affirmative
+) -> None:
+    result = run_cli(OPTIONS, f"Y\n{affirmative}\nT\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    orchestrator.export_document.assert_called_once_with(CONTENT, "TXT", "output/apuntes.txt")
 
 
 def test_empty_or_invalid_export_answers_are_asked_again(orchestrator, summary) -> None:
@@ -356,6 +405,16 @@ def test_empty_or_invalid_export_answers_are_asked_again(orchestrator, summary) 
     assert result.exit_code == 0, result.output
     assert "No has escrito nada. Escribe Y o N." in result.output
     assert "'X' no es una opción válida. Escribe Y o N." in result.output
+    assert result.output.count(cli.EXPORT_QUESTION) >= 3
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
+
+
+def test_invalid_export_answer_then_no_is_not_reused_as_yes(orchestrator, summary) -> None:
+    result = run_cli(OPTIONS, "Y\nBielarusia\nn\n")
+
+    assert result.exit_code == 0, result.output
+    assert "'BIELARUSIA' no es una opción válida. Escribe Y o N." in result.output
+    orchestrator.export_document.assert_not_called()
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
@@ -504,18 +563,33 @@ def test_slow_wikipedia_with_real_adapters_exits_with_code_1() -> None:
     assert "read timed out" not in result.output
 
 
-def test_full_flow_with_real_adapters_searches_spanish_wikipedia(summary) -> None:
+def test_full_flow_with_adapters_translates_after_searching_spanish_wikipedia(
+    summary, monkeypatch
+) -> None:
     responses = [
         make_response(json_data=SEARCH_PAYLOAD),
         make_response(text='<div id="mw-content-text"><p>Un lenguaje.</p></div>'),
     ]
+    translation_response = make_response(
+        json_data={"data": {"translations": [{"translatedText": "A language."}]}}
+    )
+    monkeypatch.setenv("GOOGLE_TRANSLATE_API_KEY", "test-key")
 
     with patch(GET, side_effect=responses) as mock_get:
-        result = run_cli(OPTIONS, "Y\nN\n")
+        with patch(TRANSLATION_POST, return_value=translation_response) as mock_post:
+            result = run_cli(OPTIONS, "Y\nN\n")
 
     assert result.exit_code == 0, result.output
     assert "Un lenguaje." in result.output
+    assert "A language." in result.output
     assert mock_get.call_args_list[0].args[0].startswith("https://es.wikipedia.org")
+    assert mock_post.call_args.kwargs["json"] == {
+        "q": "Un lenguaje.",
+        "source": "es",
+        "target": "en",
+        "format": "text",
+    }
+    assert mock_post.call_args.kwargs["headers"]["x-goog-api-key"] == "test-key"
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
@@ -541,7 +615,8 @@ def test_full_flow_creates_a_real_file_with_simulated_data(
     assert "Python" in text
     assert "A programming language." in text
     assert "A concise summary." in text
-    assert text.count(EMPTY_SECTION_TEXT) == 1
+    assert "A programming language. [inglés]" in text
+    assert text.count(EMPTY_SECTION_TEXT) == 0
 
 
 def test_enriched_text_is_shown_and_exported(orchestrator, summary) -> None:
@@ -553,6 +628,7 @@ def test_enriched_text_is_shown_and_exported(orchestrator, summary) -> None:
     orchestrator.enrich_article.assert_called_once_with(ARTICLE)
     exported_content = orchestrator.export_document.call_args.args[0]
     assert exported_content.ai_summary == AI_TEXT
+    assert exported_content.translated_summary == TRANSLATED
 
 
 @pytest.mark.parametrize(
@@ -581,14 +657,20 @@ def test_real_adapters_without_token_still_export_the_original(tmp_path, monkeyp
         make_response(json_data=SEARCH_PAYLOAD),
         make_response(text='<div id="mw-content-text"><p>Un lenguaje.</p></div>'),
     ]
+    translation_response = make_response(
+        json_data={"data": {"translations": [{"translatedText": "A language."}]}}
+    )
+    monkeypatch.setenv("GOOGLE_TRANSLATE_API_KEY", "test-key")
     monkeypatch.setattr(cli, "EXPORT_FOLDER", str(tmp_path))
 
     with patch(GET, side_effect=responses):
-        result = run_cli(OPTIONS, "Y\nY\nT\napuntes\n")
+        with patch(TRANSLATION_POST, return_value=translation_response):
+            result = run_cli(OPTIONS, "Y\nY\nT\napuntes\n")
 
     assert result.exit_code == 0, result.output
     assert "No he podido enriquecer el texto con IA" in result.output
     assert "Un lenguaje." in read_document(tmp_path / "apuntes.txt")
+    assert "A language." in read_document(tmp_path / "apuntes.txt")
 
 
 RUN_ID_LINE = re.compile(

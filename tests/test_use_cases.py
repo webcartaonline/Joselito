@@ -75,6 +75,28 @@ def test_fetch_article_only_queries_the_wikipedia_source() -> None:
     exporter.export_pdf.assert_not_called()
 
 
+def test_translate_article_sends_full_text_and_language_to_translator() -> None:
+    """The application translates the article text through its translator port."""
+
+    article = make_article(title="Python", paragraphs=["First paragraph", "Second paragraph"])
+    source = create_autospec(WikipediaSource, instance=True)
+    enricher = create_autospec(ContentEnricher, instance=True)
+    translator = create_autospec(Translator, instance=True)
+    exporter = create_autospec(DocumentExporter, instance=True)
+    translator.translate.return_value = "Texte traduit"
+    summarizer = create_autospec(ContentSummarizer, instance=True)
+    orchestrator = WikiEnrichmentOrchestrator(source, enricher, translator, exporter, summarizer)
+
+    result = orchestrator.translate_article(article, "fr")
+
+    assert result == "Texte traduit"
+    translator.translate.assert_called_once_with("First paragraph\n\nSecond paragraph", "fr")
+    source.fetch_article.assert_not_called()
+    enricher.enrich.assert_not_called()
+    exporter.export_txt.assert_not_called()
+    exporter.export_pdf.assert_not_called()
+
+
 def make_orchestrator_with_exporter():
     """Build an orchestrator whose ports are all autospec mocks."""
 

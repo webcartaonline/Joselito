@@ -6,6 +6,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+import unicodedata
 from typing import Callable, Optional
 
 import pyfiglet
@@ -222,13 +223,52 @@ def ask_topic(answer: Optional[str] = None) -> str:
     return topic
 
 
+def _casefold(text: str) -> str:
+    return unicodedata.normalize("NFKC", text).casefold()
+
+
+def _normalize_yes_no(answer: str) -> str | None:
+    """Map common affirmative/negative answers to canonical Y/N."""
+
+    key = _casefold(answer.strip())
+    if key in {"y", "yes", "si", "sí"}:
+        return YES
+    if key in {"n", "no"}:
+        return NO
+    return None
+
+
 def ask_option(question: str, options: list[str] | dict[str, str]) -> str:
     valid_options = " o ".join(options)
+    is_yes_no = isinstance(options, list) and options == [YES, NO]
     while True:
-        answer = prompt_user(question).strip().upper()
-        if not answer:
+        raw = prompt_user(question).strip()
+        if not raw:
             print()
             show_error(f"No has escrito nada. Escribe {valid_options}.")
+            continue
+
+        if is_yes_no:
+            normalized = _normalize_yes_no(raw)
+            if normalized is None:
+                print()
+                show_error(
+                    f"'{raw.strip().upper()}' no es una opción válida. "
+                    f"Escribe {valid_options}."
+                )
+            else:
+                return normalized
+            continue
+
+        answer = raw.upper()
+        if isinstance(options, dict):
+            if answer not in options:
+                print()
+                show_error(
+                    f"'{answer}' no es una opción válida. Escribe {valid_options}."
+                )
+            else:
+                return answer
         elif answer not in options:
             print()
             show_error(f"'{answer}' no es una opción válida. Escribe {valid_options}.")
@@ -598,7 +638,43 @@ def ask_file_name(export_format: str) -> str:
 
 def show_article(article: ArticleContent) -> None:
     print()
-    console.print(Panel(article.full_text, title=f"Resultados sobre {article.title}", border_style="green"))
+    console.print(
+        Panel(
+            article.full_text,
+            title=f"Resultados sobre {article.title}",
+            border_style="green",
+        )
+    )
+
+
+def translate_article(
+    orchestrator: WikiEnrichmentOrchestrator,
+    article: ArticleContent,
+    language: str,
+) -> str:
+    """Translate and display article text, reporting expected provider failures."""
+
+    try:
+        [translated_text] = run_steps(
+            [
+                (
+                    f"Traduciendo a {language} con Google Translate...",
+                    lambda: orchestrator.translate_article(article, language),
+                ),
+            ]
+        )
+    except ProviderTimeoutError:
+        print()
+        show_error("Google Translate ha tardado demasiado. Inténtalo de nuevo más tarde.")
+        raise typer.Exit(code=1) from None
+    except WikiEnrichmentError as exc:
+        print()
+        show_error(f"No he podido traducir el contenido con Google Translate: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    print()
+    console.print(Panel(translated_text, title=f"Traducción al {language}", border_style="green"))
+    return translated_text
 
 
 def enrich_article(orchestrator: WikiEnrichmentOrchestrator, article: ArticleContent) -> str:
@@ -624,16 +700,6 @@ def enrich_article(orchestrator: WikiEnrichmentOrchestrator, article: ArticleCon
 def show_enriched(ai_summary: str) -> None:
     print()
     console.print(Panel(ai_summary, title="Texto enriquecido con IA", border_style="magenta"))
-
-
-def translate_text(language: str) -> str:
-    """Return the translated text.
-
-    TODO: call the orchestrator once the translation adapter exists.
-    """
-    print()
-    run_steps([(f"Traduciendo a {language}...", None)])
-    return ""
 
 
 def build_content(
@@ -765,7 +831,7 @@ def run_app(tema: Optional[str], idioma: Optional[str]) -> None:
     ai_summary = enrich_article(orchestrator, article)
     if ai_summary:
         show_enriched(ai_summary)
-    translated_summary = translate_text(language)
+    translated_summary = translate_article(orchestrator, article, language)
     content = build_content(article, ai_summary, translated_summary)
     summary = None
     if ai_summary:

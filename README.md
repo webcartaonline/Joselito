@@ -17,6 +17,22 @@ pip install -e .
 
 ## Uso
 
+La traducción usa Google Cloud Translation Basic (v2) y necesita la variable de
+entorno `GOOGLE_TRANSLATE_API_KEY` con una clave de API de Google Cloud de un
+proyecto que tenga habilitada la
+[Cloud Translation API](https://console.cloud.google.com/apis/library/translate.googleapis.com).
+Puedes definirla en un archivo `.env` en la raíz del proyecto (UTF-8), exportarla
+en la terminal o configurarla en PyCharm antes de iniciar la aplicación. El
+arranque carga `.env` sin sobrescribir variables ya definidas. Usa
+[.env.example](.env.example) como plantilla:
+
+```bash
+GOOGLE_TRANSLATE_API_KEY=your_key_here
+```
+
+`.env` está en `.gitignore`: no guardes la clave en el repositorio. La clave se
+envía en la cabecera `x-goog-api-key`, nunca en la URL.
+
 ```bash
 python cli.py
 python cli.py --tema "Python" --idioma inglés

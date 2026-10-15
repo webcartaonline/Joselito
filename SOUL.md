@@ -81,13 +81,13 @@ Un programa que funciona en la **terminal** (pantalla negra de texto) y hace est
 | Duración y sprints | 2 sprints de 1 semana (30 sep – 14 oct) |
 | IA | **ChatGPT (API de OpenAI)** para enriquecer y resumir |
 | Estilo de nombres | **KebabCase** (para las ramas)  y **SnakeCase** (para el código y los ficheros) |
-| Traductor | **DeepTranslate API** |
+| Traductor | **Google Cloud Translation API (Basic v2)** |
 | Idioma del código | **Inglés** (clases, variables, funciones y commits) |
 | Mensajes de commit | **Conventional Commits**, en inglés, **máx. 72 caracteres** |
 | Ramas | `main`, `develop`, `feature/<tarea>` |
 | Pull Requests | Obligatorios. **Mínimo 1 compañero** revisa y los tests deben pasar |
 | Push directo a `main` o `develop` | **Prohibido** |
-| Tests | 100% de cobertura · un `.feature` (Gherkin) **por cada historia de usuario** · **prohibido** llamar a OpenAI o DeepTranslate de verdad en los tests |
+| Tests | 100% de cobertura · un `.feature` (Gherkin) **por cada historia de usuario** · **prohibido** llamar a OpenAI o Google Translate de verdad en los tests |
 | Log | Obligatorio, archivo `app.log` |
 | Calidad de código | Type hints · docstrings · nada de "números mágicos" (ver [apartado 8](#8--reglas-de-código-del-equipo)) |
 | Columnas del kanban | To Do · In Progress · Code Review · Testing · Done |
@@ -100,7 +100,7 @@ Un programa que funciona en la **terminal** (pantalla negra de texto) y hace est
 |---|---|---|
 | Librería para PDF | **ReportLab** (la recomienda la profe) · **fpdf2** (más sencilla) | 🟡 FPDF |
 | Modelo de ChatGPT | Mirar lista y precios en la web de OpenAI | 🟡 DECIDIR |
-| Quién paga / de quién son las claves (OpenAI y RapidAPI) | Cuenta común o cada uno la suya | 🟡 DECIDIR |
+| Quién paga / de quién son las claves (OpenAI y Google Cloud) | Cuenta común o cada uno la suya | 🟡 DECIDIR |
 | Formato de docstrings | Google **o** NumPy (elegir uno) | 🟡 DECIDIR |
 | Versión de Python | Recomendado 3.11 o superior, **todos la misma** | 🟡 DECIDIR |
 | Idioma de Wikipedia | `es` · `en` · que elija el usuario | 🟡 DECIDIR |
@@ -188,7 +188,7 @@ Un programa que funciona en la **terminal** (pantalla negra de texto) y hace est
 | **Cuenta de GitHub** | Donde vive el código del equipo | https://github.com |
 | **VS Code** (u otro editor) | Escribir el código | https://code.visualstudio.com |
 | **Cuenta de OpenAI** | Clave de ChatGPT | https://platform.openai.com |
-| **Cuenta de RapidAPI** | Clave de DeepTranslate | https://rapidapi.com |
+| **Cuenta de Google Cloud** | Clave de Cloud Translation | https://console.cloud.google.com |
 | **Jira** o **Trello** 🟡 | Tablero kanban | https://www.atlassian.com/es/software/jira · https://trello.com |
 
 ### Librerías de Python
@@ -275,39 +275,32 @@ print(paragraphs[:MAX_PARAGRAPHS])
 
 ---
 
-### 6.2 DeepTranslate (traducción) ✅
+### 6.2 Google Cloud Translation (traducción) ✅
 
 | Qué | Dónde |
 |---|---|
-| Página de la API | https://rapidapi.com/gatzuma/api/deep-translate1 |
-| Planes y precio | https://rapidapi.com/gatzuma/api/deep-translate1/pricing |
+| Documentación (Basic v2) | https://cloud.google.com/translate/docs/basic/translating-text |
+| Planes y precio | https://cloud.google.com/translate/pricing |
 
 **Cómo conseguir la clave:**
-1. Crear cuenta en RapidAPI.
-2. Entrar en la página de Deep Translate → pestaña **Pricing** → suscribirse al plan **Basic** (gratis).
-3. En la pestaña **Endpoints** aparece tu clave (`X-RapidAPI-Key`).
-4. Guardarla en el `.env` (nunca en el código).
-
-> ⚠️ **COMPROBAR** el límite de caracteres gratis del plan Basic, y que la dirección y el formato del ejemplo siguen iguales en la pestaña *Endpoints*.
+1. En Google Cloud Console, habilitar la **Cloud Translation API** en el proyecto.
+2. En **APIs y servicios → Credenciales**, crear una clave de API (mejor restringida a la Cloud Translation API).
+3. Guardarla en el `.env` como `GOOGLE_TRANSLATE_API_KEY` (nunca en el código).
 
 **Ejemplo mínimo:**
 ```python
 import os
 import requests
-from dotenv import load_dotenv
 
-load_dotenv()  # lee el archivo .env
-
-TRANSLATE_URL = "https://deep-translate1.p.rapidapi.com/language/translate/v2"
+TRANSLATE_URL = "https://translation.googleapis.com/language/translate/v2"
 headers = {
-    "x-rapidapi-key": os.getenv("RAPIDAPI_KEY"),
-    "x-rapidapi-host": "deep-translate1.p.rapidapi.com",
-    "Content-Type": "application/json",
+    "x-goog-api-key": os.getenv("GOOGLE_TRANSLATE_API_KEY"),
+    "Content-Type": "application/json; charset=utf-8",
 }
-payload = {"q": "Hola mundo", "source": "es", "target": "en"}
+payload = {"q": "Hola mundo", "source": "es", "target": "en", "format": "text"}
 
 response = requests.post(TRANSLATE_URL, json=payload, headers=headers, timeout=15)
-print(response.json()["data"]["translations"]["translatedText"])  # Hello world
+print(response.json()["data"]["translations"][0]["translatedText"])  # Hello world
 ```
 
 **Códigos de idioma más usados** (el usuario escribe "inglés" → la app manda `en`):
@@ -760,7 +753,7 @@ Las claves son como contraseñas: **nunca** se suben a GitHub. Si se suben, cual
 **`.env.example`** (este SÍ se sube, sin claves reales):
 ```
 OPENAI_API_KEY=your_key_here
-RAPIDAPI_KEY=your_key_here
+GOOGLE_TRANSLATE_API_KEY=your_key_here
 ```
 
 **`.env`** (este NO se sube; cada uno tiene el suyo con claves reales).

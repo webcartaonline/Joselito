@@ -92,6 +92,11 @@ class WikiEnrichmentOrchestrator:
         )
         return article
 
+    def translate_article(self, article: ArticleContent, target_lang: str) -> str:
+        """Translate the fetched article while keeping provider I/O in its adapter."""
+
+        return self._translator.translate(article.full_text, target_lang)
+
     def enrich_article(self, article: ArticleContent) -> EnrichedContent:
         """Enrich an already fetched article without translating or exporting it."""
 
@@ -202,4 +207,3 @@ class WikiEnrichmentOrchestrator:
         self.export_document(completed, "PDF", f"{export_path}.pdf")
         logger.info("Pipeline finished: topic=%s", topic)
         return completed
-
