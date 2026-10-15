@@ -9,15 +9,32 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 import cli
+from tests.helpers.document_readers import read_document
+from tests.helpers.fake_adapters import (
+    FakeContentEnricher,
+    FakeTranslator,
+    FakeWikipediaSource,
+)
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.domain.exceptions import (
+    EnrichmentError,
+    ExportError,
     ProviderTimeoutError,
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.domain.models import ArticleContent
+from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from wiki_enrichment.infrastructure.exporters import EMPTY_SECTION_TEXT, DocumentExporterAdapter
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
+AI_TEXT = "Python es un lenguaje muy usado para aprender a programar."
+TRANSLATED = "Un lenguaje de programación."
+ENRICHED = EnrichedContent(original_article=ARTICLE, ai_summary=AI_TEXT)
+CONTENT = EnrichedContent(
+    original_article=ARTICLE,
+    ai_summary=AI_TEXT,
+    translated_summary=TRANSLATED,
+)
 GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
 TRANSLATION_POST = "wiki_enrichment.infrastructure.translation.requests.post"
 OPTIONS = ["--tema", "Python", "--idioma", "inglés"]
@@ -51,11 +68,18 @@ def fast_plain_console(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def no_real_ai_token(monkeypatch):
+    """Never call the real AI from tests, even if a .env file has a token."""
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+
+
 @pytest.fixture
 def orchestrator():
     fake = create_autospec(WikiEnrichmentOrchestrator, instance=True)
     fake.fetch_article.return_value = ARTICLE
-    fake.translate_article.return_value = "Un lenguaje de programación."
+    fake.enrich_article.return_value = ENRICHED
+    fake.translate_article.return_value = TRANSLATED
     with patch("cli.build_orchestrator", return_value=fake):
         yield fake
 
@@ -90,7 +114,7 @@ def test_options_skip_the_topic_and_language_questions(orchestrator, summary) ->
     assert cli.LANGUAGE_QUESTION not in result.output
     orchestrator.fetch_article.assert_called_once_with("Python")
     orchestrator.translate_article.assert_called_once_with(ARTICLE, "inglés")
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
 def test_missing_options_are_asked_interactively(orchestrator, summary) -> None:
@@ -100,7 +124,7 @@ def test_missing_options_are_asked_interactively(orchestrator, summary) -> None:
     assert cli.TOPIC_QUESTION in result.output
     assert cli.LANGUAGE_QUESTION in result.output
     orchestrator.fetch_article.assert_called_once_with("Python")
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
 def test_successful_run_shows_article_summary_and_goodbye(orchestrator) -> None:
@@ -108,7 +132,7 @@ def test_successful_run_shows_article_summary_and_goodbye(orchestrator) -> None:
 
     assert result.exit_code == 0, result.output
     assert "A programming language." in result.output
-    assert "Un lenguaje de programación." in result.output
+    assert TRANSLATED in result.output
     assert "Resumen" in result.output
     assert "Mi trabajo aquí ha terminado" in result.output
 
@@ -147,7 +171,28 @@ def test_empty_language_is_asked_again(orchestrator, summary) -> None:
 
     assert result.exit_code == 0, result.output
     assert EMPTY_TEXT_ERROR in result.output
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
+
+
+@pytest.mark.parametrize("negative", ["N", "n", "NO", "No", "no", "  no  "])
+def test_export_declined_with_common_negative_answers(
+    orchestrator, summary, negative
+) -> None:
+    result = run_cli(OPTIONS, f"{negative}\n")
+
+    assert result.exit_code == 0, result.output
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
+    orchestrator.export_document.assert_not_called()
+
+
+@pytest.mark.parametrize("affirmative", ["Y", "yes", "YES", "Sí", "si", "  Si  "])
+def test_export_accepted_with_common_affirmative_answers(
+    orchestrator, summary, affirmative
+) -> None:
+    result = run_cli(OPTIONS, f"{affirmative}\nT\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    orchestrator.export_document.assert_called_once_with(CONTENT, "TXT", "output/apuntes.txt")
 
 
 def test_empty_or_invalid_export_answers_are_asked_again(orchestrator, summary) -> None:
@@ -156,17 +201,81 @@ def test_empty_or_invalid_export_answers_are_asked_again(orchestrator, summary) 
     assert result.exit_code == 0, result.output
     assert "No has escrito nada. Escribe Y o N." in result.output
     assert "'X' no es una opción válida. Escribe Y o N." in result.output
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    assert result.output.count(cli.EXPORT_QUESTION) >= 3
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
-@pytest.mark.parametrize(("answer", "export_format"), [("P", "PDF"), ("t", "TXT")])
-def test_chosen_export_format_reaches_the_summary(
-    orchestrator, summary, answer, export_format
-) -> None:
-    result = run_cli(OPTIONS, f"Y\n{answer}\n")
+def test_invalid_export_answer_then_no_is_not_reused_as_yes(orchestrator, summary) -> None:
+    result = run_cli(OPTIONS, "Bielarusia\nn\n")
 
     assert result.exit_code == 0, result.output
-    summary.assert_called_once_with("Python", "inglés", export_format)
+    assert "'BIELARUSIA' no es una opción válida. Escribe Y o N." in result.output
+    orchestrator.export_document.assert_not_called()
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
+
+
+@pytest.mark.parametrize(
+    ("answers", "export_format", "file_name"),
+    [
+        ("P\napuntes", "PDF", "output/apuntes.pdf"),
+        ("t\nmis apuntes", "TXT", "output/mis apuntes.txt"),
+        ("P\nresumen.PDF", "PDF", "output/resumen.pdf"),
+        ("T\nnotas.pdf", "TXT", "output/notas.pdf.txt"),
+    ],
+)
+def test_chosen_format_and_file_name_are_exported(
+    orchestrator, summary, answers, export_format, file_name
+) -> None:
+    result = run_cli(OPTIONS, f"Y\n{answers}\n")
+
+    assert result.exit_code == 0, result.output
+    assert cli.FILE_NAME_QUESTION in result.output
+    orchestrator.export_document.assert_called_once_with(CONTENT, export_format, file_name)
+    summary.assert_called_once_with("Python", "inglés", export_format, file_name)
+
+
+def test_no_export_does_not_ask_for_a_file_name(orchestrator, summary) -> None:
+    result = run_cli(OPTIONS, "N\n")
+
+    assert result.exit_code == 0, result.output
+    assert cli.FILE_NAME_QUESTION not in result.output
+    orchestrator.export_document.assert_not_called()
+
+
+def test_export_failure_shows_a_message(orchestrator, summary) -> None:
+    orchestrator.export_document.side_effect = ExportError("disk full")
+
+    result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    assert "No he podido guardar el archivo." in result.output
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
+
+
+def test_invalid_file_names_are_asked_again(orchestrator, summary) -> None:
+    result = run_cli(OPTIONS, "Y\nP\n\nnotas?\ncon\nnotas.\nnotas\n")
+
+    assert result.exit_code == 0, result.output
+    assert EMPTY_TEXT_ERROR in result.output
+    assert "no puede llevar estos símbolos: ?" in result.output
+    assert "'con' es un nombre reservado" in result.output
+    assert "no puede terminar en punto" in result.output
+    summary.assert_called_once_with("Python", "inglés", "PDF", "output/notas.pdf")
+
+
+@pytest.mark.parametrize(
+    "name", ["", "a/b", "a\\b", "a:b", "a*b", "a?b", 'a"b', "a<b", "a>b", "a|b",
+             "fin.", "CON", "nul", "COM1", "lpt9", "x" * 101],
+)
+def test_file_name_error_rejects_invalid_names(name) -> None:
+    assert cli.file_name_error(name) is not None
+
+
+@pytest.mark.parametrize(
+    "name", ["apuntes", "mis apuntes", "Tema_1-final", "versión.2", "x" * 100, "CONSOLA"],
+)
+def test_file_name_error_accepts_valid_names(name) -> None:
+    assert cli.file_name_error(name) is None
 
 
 def test_unknown_topic_asks_for_a_new_one(orchestrator, summary) -> None:
@@ -178,7 +287,7 @@ def test_unknown_topic_asks_for_a_new_one(orchestrator, summary) -> None:
     assert "No he encontrado nada sobre 'zzzxxyy' en Wikipedia" in result.output
     calls = [call.args for call in orchestrator.fetch_article.call_args_list]
     assert calls == [("zzzxxyy",), ("Python",)]
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
 @pytest.mark.parametrize(
@@ -231,4 +340,77 @@ def test_full_flow_with_adapters_translates_after_searching_spanish_wikipedia(
         "format": "text",
     }
     assert mock_post.call_args.kwargs["headers"]["x-goog-api-key"] == "test-key"
-    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)
+    summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
+
+
+@pytest.mark.parametrize(("answer", "file_name"), [("T", "apuntes.txt"), ("P", "apuntes.pdf")])
+def test_full_flow_creates_a_real_file_with_simulated_data(
+    tmp_path, monkeypatch, answer, file_name
+) -> None:
+    """From the questions to the saved file, with fakes instead of real services."""
+    orchestrator = WikiEnrichmentOrchestrator(
+        FakeWikipediaSource(article=ARTICLE),
+        FakeContentEnricher(),
+        FakeTranslator(),
+        DocumentExporterAdapter(),
+    )
+    monkeypatch.setattr(cli, "EXPORT_FOLDER", str(tmp_path))
+
+    with patch("cli.build_orchestrator", return_value=orchestrator):
+        result = run_cli(OPTIONS, f"Y\n{answer}\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    text = read_document(tmp_path / file_name)
+    assert "Python" in text
+    assert "A programming language." in text
+    assert "A concise summary." in text
+    assert "A programming language. [inglés]" in text
+    assert text.count(EMPTY_SECTION_TEXT) == 0
+
+
+def test_enriched_text_is_shown_and_exported(orchestrator, summary) -> None:
+    result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Texto enriquecido con IA" in result.output
+    assert AI_TEXT in result.output
+    orchestrator.enrich_article.assert_called_once_with(ARTICLE)
+    exported_content = orchestrator.export_document.call_args.args[0]
+    assert exported_content.ai_summary == AI_TEXT
+    assert exported_content.translated_summary == TRANSLATED
+
+
+@pytest.mark.parametrize("error", [EnrichmentError("no token"), ProviderTimeoutError("slow")])
+def test_ai_failure_shows_a_message_and_keeps_going(orchestrator, summary, error) -> None:
+    orchestrator.enrich_article.side_effect = error
+
+    result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    assert "No he podido enriquecer el texto con IA" in result.output
+    assert "Texto enriquecido con IA" not in result.output
+    exported_content = orchestrator.export_document.call_args.args[0]
+    assert exported_content.ai_summary == ""
+    summary.assert_called_once_with("Python", "inglés", "TXT", "output/apuntes.txt")
+
+
+def test_real_adapters_without_token_still_export_the_original(tmp_path, monkeypatch, summary) -> None:
+    """Without HF_TOKEN the app warns about the AI and still saves the file."""
+    responses = [
+        make_response(json_data={"query": {"search": [{"title": "Python"}]}}),
+        make_response(text='<div id="mw-content-text"><p>Un lenguaje.</p></div>'),
+    ]
+    translation_response = make_response(
+        json_data={"data": {"translations": [{"translatedText": "A language."}]}}
+    )
+    monkeypatch.setenv("GOOGLE_TRANSLATE_API_KEY", "test-key")
+    monkeypatch.setattr(cli, "EXPORT_FOLDER", str(tmp_path))
+
+    with patch(GET, side_effect=responses):
+        with patch(TRANSLATION_POST, return_value=translation_response):
+            result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+
+    assert result.exit_code == 0, result.output
+    assert "No he podido enriquecer el texto con IA" in result.output
+    assert "Un lenguaje." in read_document(tmp_path / "apuntes.txt")
+    assert "A language." in read_document(tmp_path / "apuntes.txt")

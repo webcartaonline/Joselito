@@ -2,6 +2,8 @@
 
 from unittest.mock import create_autospec
 
+import pytest
+
 from tests.helpers.content_mocks import make_article, make_enriched
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.domain.ports import (
@@ -79,5 +81,75 @@ def test_translate_article_sends_full_text_and_language_to_translator() -> None:
     translator.translate.assert_called_once_with("First paragraph\n\nSecond paragraph", "fr")
     source.fetch_article.assert_not_called()
     enricher.enrich.assert_not_called()
+    exporter.export_txt.assert_not_called()
+    exporter.export_pdf.assert_not_called()
+
+
+def make_orchestrator_with_exporter():
+    """Build an orchestrator whose ports are all autospec mocks."""
+
+    exporter = create_autospec(DocumentExporter, instance=True)
+    orchestrator = WikiEnrichmentOrchestrator(
+        create_autospec(WikipediaSource, instance=True),
+        create_autospec(ContentEnricher, instance=True),
+        create_autospec(Translator, instance=True),
+        exporter,
+    )
+    return orchestrator, exporter
+
+
+def test_export_document_as_pdf_only_creates_the_pdf() -> None:
+    """Choosing PDF exports a single PDF file with the given path."""
+
+    content = make_enriched(make_article(), "A concise summary.", "Un résumé.")
+    orchestrator, exporter = make_orchestrator_with_exporter()
+
+    orchestrator.export_document(content, "PDF", "output/notes.pdf")
+
+    exporter.export_pdf.assert_called_once_with(content, "output/notes.pdf")
+    exporter.export_txt.assert_not_called()
+
+
+def test_export_document_as_txt_only_creates_the_txt() -> None:
+    """Choosing TXT exports a single text file with the given path."""
+
+    content = make_enriched(make_article(), "A concise summary.", "Un résumé.")
+    orchestrator, exporter = make_orchestrator_with_exporter()
+
+    orchestrator.export_document(content, "TXT", "output/notes.txt")
+
+    exporter.export_txt.assert_called_once_with(content, "output/notes.txt")
+    exporter.export_pdf.assert_not_called()
+
+
+def test_export_document_rejects_unknown_formats() -> None:
+    """An unsupported format raises an error and exports nothing."""
+
+    content = make_enriched(make_article(), "A concise summary.")
+    orchestrator, exporter = make_orchestrator_with_exporter()
+
+    with pytest.raises(ValueError, match="DOCX"):
+        orchestrator.export_document(content, "DOCX", "output/notes.docx")
+
+    exporter.export_txt.assert_not_called()
+    exporter.export_pdf.assert_not_called()
+
+
+def test_enrich_article_only_calls_the_enricher() -> None:
+    """Enriching an article does not fetch, translate or export anything."""
+
+    article = make_article()
+    enriched = make_enriched(article, "A concise summary.")
+    source = create_autospec(WikipediaSource, instance=True)
+    enricher = create_autospec(ContentEnricher, instance=True)
+    translator = create_autospec(Translator, instance=True)
+    exporter = create_autospec(DocumentExporter, instance=True)
+    enricher.enrich.return_value = enriched
+    orchestrator = WikiEnrichmentOrchestrator(source, enricher, translator, exporter)
+
+    assert orchestrator.enrich_article(article) == enriched
+    enricher.enrich.assert_called_once_with(article)
+    source.fetch_article.assert_not_called()
+    translator.translate.assert_not_called()
     exporter.export_txt.assert_not_called()
     exporter.export_pdf.assert_not_called()

@@ -40,6 +40,28 @@ class WikiEnrichmentOrchestrator:
 
         return self._translator.translate(article.full_text, target_lang)
 
+    def enrich_article(self, article: ArticleContent) -> EnrichedContent:
+        """Enrich an already fetched article without translating or exporting it."""
+
+        return self._content_enricher.enrich(article)
+
+    def export_document(
+        self, content: EnrichedContent, export_format: str, path: str
+    ) -> None:
+        """Export content only in the format chosen by the user.
+
+        ``export_format`` must be ``"TXT"`` or ``"PDF"`` and ``path`` is the
+        full file path, extension included (for example ``output/notes.pdf``).
+        """
+
+        exporters = {
+            "TXT": self._document_exporter.export_txt,
+            "PDF": self._document_exporter.export_pdf,
+        }
+        if export_format not in exporters:
+            raise ValueError(f"Unsupported export format: {export_format}")
+        exporters[export_format](content, path)
+
     def execute(
         self, topic: str, target_lang: str, export_path: str
     ) -> EnrichedContent:
@@ -62,4 +84,3 @@ class WikiEnrichmentOrchestrator:
         self._document_exporter.export_txt(completed, f"{export_path}.txt")
         self._document_exporter.export_pdf(completed, f"{export_path}.pdf")
         return completed
-
