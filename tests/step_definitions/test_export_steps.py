@@ -1,4 +1,5 @@
 """BDD step definitions for exporting documents with simulated content."""
+from unittest.mock import create_autospec
 
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
@@ -13,6 +14,7 @@ from tests.helpers.fake_adapters import (
 )
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.domain.exceptions import ExportError
+from wiki_enrichment.domain.ports import ContentSummarizer
 from wiki_enrichment.infrastructure.exporters import (
     EMPTY_SECTION_TEXT,
     ENRICHED_HEADING,
@@ -37,6 +39,7 @@ def context(tmp_path):
         FakeContentEnricher(),
         FakeTranslator(),
         DocumentExporterAdapter(),
+        create_autospec(ContentSummarizer, instance=True),
     )
     return {"folder": tmp_path, "orchestrator": orchestrator}
 

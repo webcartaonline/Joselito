@@ -16,6 +16,7 @@ from tests.helpers.fake_adapters import (
     FakeWikipediaSource,
 )
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
+from wiki_enrichment.domain.ports import ContentSummarizer
 from wiki_enrichment.domain.exceptions import (
     EnrichmentError,
     ExportError,
@@ -24,6 +25,7 @@ from wiki_enrichment.domain.exceptions import (
     WikiEnrichmentError,
 )
 from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from wiki_enrichment.domain.ports import ContentSummarizer
 from wiki_enrichment.infrastructure.exporters import EMPTY_SECTION_TEXT, DocumentExporterAdapter
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
@@ -66,9 +68,13 @@ def fast_plain_console(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_real_ai_token(monkeypatch):
-    """Never call the real AI from tests, even if a .env file has a token."""
-    monkeypatch.delenv("HF_TOKEN", raising=False)
+    """Never call the real AI from tests, even if a .env file has a key."""
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
+@pytest.fixture(autouse=True)
+def skip_summary_question(monkeypatch):
+    """The summary question is tested in test_cli_summary.py, so these tests skip it."""
+    monkeypatch.setattr(cli.BriefSummaryFlow, "request", lambda self, content, language: None)
 
 @pytest.fixture
 def orchestrator():
@@ -363,6 +369,7 @@ def test_full_flow_creates_a_real_file_with_simulated_data(
         FakeContentEnricher(),
         FakeTranslator(),
         DocumentExporterAdapter(),
+        create_autospec(ContentSummarizer, instance=True),
     )
     monkeypatch.setattr(cli, "EXPORT_FOLDER", str(tmp_path))
 
@@ -409,7 +416,7 @@ def test_ai_failure_shows_a_message_and_keeps_going(orchestrator, summary, error
 
 
 def test_real_adapters_without_token_still_export_the_original(tmp_path, monkeypatch, summary) -> None:
-    """Without HF_TOKEN the app warns about the AI and still saves the file."""
+    """Without DEEPSEEK_API_KEY the app warns about the AI and still saves the file."""
     responses = [
         make_response(json_data={"query": {"search": [{"title": "Python"}]}}),
         make_response(text='<div id="mw-content-text"><p>Un lenguaje.</p></div>'),

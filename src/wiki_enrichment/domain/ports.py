@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from wiki_enrichment.domain.models import ArticleContent, BriefSummary, EnrichedContent
 
 
 class WikipediaSource(Protocol):
@@ -27,7 +27,7 @@ class Translator(Protocol):
 
 
 class DocumentExporter(Protocol):
-    """Port for exporting enriched content to supported document formats."""
+    """Port for exporting enriched content and summaries to supported formats."""
 
     def export_txt(self, content: EnrichedContent, path: str) -> None:
         """Export content as a plain-text document."""
@@ -35,3 +35,15 @@ class DocumentExporter(Protocol):
     def export_pdf(self, content: EnrichedContent, path: str) -> None:
         """Export content as a PDF document."""
 
+    def export_summary_txt(self, summary: BriefSummary, path: str) -> None:
+        """Export a brief summary as a plain-text document."""
+
+    def export_summary_pdf(self, summary: BriefSummary, path: str) -> None:
+        """Export a brief summary as a PDF document."""
+
+
+class ContentSummarizer(Protocol):
+    """Port for generating a brief summary of a text."""
+
+    def summarize(self, text: str) -> str:
+        """Generate a brief summary for the given text."""

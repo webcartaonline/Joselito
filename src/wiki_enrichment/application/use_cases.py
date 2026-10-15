@@ -1,8 +1,13 @@
 """Application use cases composed exclusively from domain ports."""
 
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from wiki_enrichment.domain.models import(
+    ArticleContent,
+    BriefSummary,
+    EnrichedContent
+)
 from wiki_enrichment.domain.ports import (
     ContentEnricher,
+    ContentSummarizer,
     DocumentExporter,
     Translator,
     WikipediaSource,
@@ -18,6 +23,7 @@ class WikiEnrichmentOrchestrator:
         content_enricher: ContentEnricher,
         translator: Translator,
         document_exporter: DocumentExporter,
+        content_summarizer: ContentSummarizer,
     ) -> None:
         """Configure the use case with its required ports."""
 
@@ -25,6 +31,7 @@ class WikiEnrichmentOrchestrator:
         self._content_enricher = content_enricher
         self._translator = translator
         self._document_exporter = document_exporter
+        self._content_summarizer = content_summarizer
 
     def fetch_article(self, topic: str) -> ArticleContent:
         """Retrieve the source article for a topic without further processing.
@@ -56,6 +63,32 @@ class WikiEnrichmentOrchestrator:
         if export_format not in exporters:
             raise ValueError(f"Unsupported export format: {export_format}")
         exporters[export_format](content, path)
+
+    def summarize(self, content: EnrichedContent, target_lang: str) -> BriefSummary:
+        """Generate a brief summary of the enriched text without translating it."""
+
+        text = self._content_summarizer.summarize(content.ai_summary)
+        return BriefSummary(
+            title=content.original_article.title,
+            text=text,
+        )
+
+    def export_summary(
+            self, summary: BriefSummary, export_format: str, path: str
+    ) -> None:
+        """Export the brief summary only in the format chosen by the user.
+
+        ``export_format`` must be ``"TXT"`` or ``"PDF"`` and ``path`` is the
+        full file path, extension included.
+        """
+
+        exporters = {
+            "TXT": self._document_exporter.export_summary_txt,
+            "PDF": self._document_exporter.export_summary_pdf,
+        }
+        if export_format not in exporters:
+            raise ValueError(f"Unsupported export format: {export_format}")
+        exporters[export_format](summary, path)
 
     def execute(
         self, topic: str, target_lang: str, export_path: str

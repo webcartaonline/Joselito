@@ -1,6 +1,6 @@
 """BDD step definitions for clear error messages, with simulated failures."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 import requests
@@ -9,7 +9,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 import re
-from types import SimpleNamespace
+from contextlib import nullcontext
 
 import cli
 from tests.helpers.fake_adapters import (
@@ -19,10 +19,12 @@ from tests.helpers.fake_adapters import (
     FakeWikipediaSource,
 )
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.infrastructure.huggingface_enricher import HuggingFaceEnricher
+from wiki_enrichment.domain.ports import ContentSummarizer
+from wiki_enrichment.infrastructure.deepseek_enricher import DeepSeekEnricher
 from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
 
 REQUESTS_GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
+DEEPSEEK_POST = "wiki_enrichment.infrastructure.deepseek_enricher.requests.post"
 LANGUAGE = "inglés"
 NO_EXPORT = "N\n"
 TECHNICAL_WORDS = [
@@ -37,14 +39,21 @@ runner = CliRunner()
 
 
 @pytest.fixture(autouse=True)
-def plain_console(monkeypatch):
-    """Print without colors so the messages can be read in the output."""
+def plain_console(monkeypatch, tmp_path):
+    """Print without colors, and save any file in a temporary folder."""
     monkeypatch.setattr(cli, "PENDING_STEP_SECONDS", 0)
+    monkeypatch.setattr(cli, "EXPORT_FOLDER", str(tmp_path))
     monkeypatch.setattr(
         cli,
         "console",
         Console(force_terminal=False, color_system=None, highlight=False, width=120),
     )
+
+
+@pytest.fixture(autouse=True)
+def skip_summary_question(monkeypatch):
+    """The summary question has its own tests, so these scenarios skip it."""
+    monkeypatch.setattr(cli.BriefSummaryFlow, "request", lambda self, content, language: None)
 
 
 @pytest.fixture
@@ -73,10 +82,9 @@ def slow_wikipedia(context) -> None:
 
 @given("the AI takes too long to respond")
 def slow_ai(context) -> None:
-    """Use the real Hugging Face adapter with a client that times out."""
-    client = MagicMock()
-    client.chat_completion.side_effect = TimeoutError("timed out")
-    context["enricher"] = HuggingFaceEnricher(model="test/model", client=client)
+    """Use the real DeepSeek adapter, but make its request time out."""
+    context["enricher"] = DeepSeekEnricher(api_key="test-key")
+    context["ai_request"] = patch(DEEPSEEK_POST, side_effect=requests.Timeout("timed out"))
 
 
 def expand(text: str) -> str:
@@ -92,10 +100,11 @@ def run_app(context, options: list[str], user_input: str) -> None:
         context["enricher"],
         FakeTranslator(),
         FakeDocumentExporter(),
+        create_autospec(ContentSummarizer, instance=True),
     )
     with patch("cli.build_orchestrator", return_value=orchestrator), patch(
         REQUESTS_GET, side_effect=context.get("http_failure")
-    ):
+    ), context.get("ai_request", nullcontext()):
         context["result"] = runner.invoke(cli.app, options, input=user_input)
 
 
@@ -115,10 +124,11 @@ def user_cancels(context) -> None:
 
 @given("the AI returns a broken answer")
 def broken_ai_answer(context) -> None:
-    """Use the real Hugging Face adapter with a client that answers nothing."""
-    client = MagicMock()
-    client.chat_completion.return_value = SimpleNamespace(choices=[])
-    context["enricher"] = HuggingFaceEnricher(model="test/model", client=client)
+    """Use the real DeepSeek adapter, but make it answer without any text."""
+    response = MagicMock()
+    response.json.return_value = {"choices": []}
+    context["enricher"] = DeepSeekEnricher(api_key="test-key")
+    context["ai_request"] = patch(DEEPSEEK_POST, return_value=response)
 
 
 @when(parsers.parse('I research "{topic}"'))

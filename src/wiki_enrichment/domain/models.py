@@ -25,3 +25,11 @@ class EnrichedContent:
     ai_summary: str
     translated_summary: str = ""
 
+
+@dataclass(frozen=True)
+class BriefSummary:
+    """A short summary of enriched content, with its translation."""
+
+    title: str
+    text: str
+    translated_text: str = ""

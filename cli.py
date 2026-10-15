@@ -1,4 +1,6 @@
+import os
 import time
+from pathlib import Path
 from typing import Callable, Optional
 
 import pyfiglet
@@ -16,7 +18,7 @@ from wiki_enrichment.domain.exceptions import (
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from wiki_enrichment.domain.models import ArticleContent, BriefSummary, EnrichedContent
 
 WIKIPEDIA_LANGUAGE = "es"
 BANNER_FONT = "larry3d"
@@ -24,8 +26,10 @@ PENDING_STEP_SECONDS = 1
 
 TOPIC_QUESTION = "¿Qué tema quieres investigar?"
 LANGUAGE_QUESTION = "¿A qué idioma quieres traducirlo?"
+SUMMARY_QUESTION = "¿Quieres un resumen breve? (Y/N)"
 EXPORT_QUESTION = "¿Quieres exportar la investigación? (Y/N)"
 FORMAT_QUESTION = "¿PDF (P) o TXT (T)?"
+SUMMARY_FORMAT_QUESTION = "¿Resumen en PDF (P) o TXT (T)?"
 FILE_NAME_QUESTION = "¿Con qué nombre quieres guardar el archivo?"
 EMPTY_ANSWER_ERROR = "No has escrito nada. Inténtalo de nuevo."
 MAX_TOPIC_LENGTH = 300  # Longest search that Wikipedia accepts.
@@ -33,8 +37,8 @@ MAX_TOPIC_LENGTH = 300  # Longest search that Wikipedia accepts.
 YES, NO = "Y", "N"
 EXPORT_FORMATS = {"P": "PDF", "T": "TXT"}
 ENRICH_ERROR = (
-    "No he podido enriquecer el texto con IA. Revisa que tienes HF_TOKEN en el archivo "
-    ".env, que tu cuenta de Hugging Face tiene créditos y que hay conexión a internet. "
+    "No he podido enriquecer el texto con IA. Revisa que tienes DEEPSEEK_API_KEY en el archivo "
+    ".env, que tu cuenta de DeepSeek tiene saldo y que hay conexión a internet. "
     "El documento se guardará sin el texto enriquecido."
 )
 ENRICH_TIMEOUT_ERROR = (
@@ -49,8 +53,14 @@ UNEXPECTED_ERROR = (
     "Ha ocurrido un error inesperado y no he podido continuar. "
     "Inténtalo de nuevo y, si se repite, avisa al equipo."
 )
+SUMMARY_ERROR = (
+    "No he podido generar el resumen breve. Revisa que tienes DEEPSEEK_API_KEY en el archivo "
+    ".env y que hay conexión a internet. El documento se guardará sin resumen."
+)
 EXTENSIONS = {"PDF": ".pdf", "TXT": ".txt"}
 EXPORT_FOLDER = "output"
+LAST_ERROR_FILE = "ultimo_error_ia.txt"
+SUMMARY_SUFFIX = "_summary"
 NOT_EXPORTED = "No"
 NO_FILE = "-"
 
@@ -72,6 +82,31 @@ def show_banner(text: str) -> None:
 
 def show_error(message: str) -> None:
     console.print(Panel(message, border_style="red", title="Error"))
+
+
+def resolve_export_path(file_name: str) -> str:
+    """Return the export path as an absolute path next to the repo root.
+
+    ``EXPORT_FOLDER`` may be overridden in tests with an absolute tmp path.
+    """
+    base = Path(EXPORT_FOLDER)
+    if not base.is_absolute():
+        base = Path(__file__).resolve().parent / base
+    return str(base / file_name)
+
+
+def log_ai_error(detail: str) -> str:
+    """Save the AI error detail so it is not lost after the long article panel.
+
+    Best effort: never raises. Returns the path used.
+    """
+    path = Path(resolve_export_path(LAST_ERROR_FILE))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(detail, encoding="utf-8")
+    except OSError:
+        pass
+    return str(path)
 
 
 class QuestionPrompt(Prompt):
@@ -236,9 +271,11 @@ def enrich_article(orchestrator: WikiEnrichmentOrchestrator, article: ArticleCon
         print()
         show_error(ENRICH_TIMEOUT_ERROR)
         return ""
-    except WikiEnrichmentError:
+    except WikiEnrichmentError as error:
         print()
-        show_error(ENRICH_ERROR)
+        detail = str(error)
+        error_path = log_ai_error(f"Enriquecimiento con IA fallido.\nDetalle: {detail}\n")
+        show_error(f"{ENRICH_ERROR}\n\nDetalle: {detail}\n\nHe guardado el detalle en {error_path}")
         return ""
 
 
@@ -268,24 +305,86 @@ def build_content(
     )
 
 
+class BriefSummaryFlow:
+    """Handle the optional brief summary in the terminal."""
+
+    def __init__(self, orchestrator: WikiEnrichmentOrchestrator) -> None:
+        """Keep the orchestrator that summarizes and translates the text."""
+        self._orchestrator = orchestrator
+
+    def request(
+        self, content: EnrichedContent, language: str
+    ) -> Optional[BriefSummary]:
+        """Ask for a brief summary, generate it and show it before exporting."""
+        if ask_option(SUMMARY_QUESTION, [YES, NO]) == NO:
+            return None
+        try:
+            print()
+            [summary] = run_steps([(
+                "Resumiendo...",
+                lambda: self._orchestrator.summarize(content, language),
+            )])
+        except WikiEnrichmentError as error:
+            print()
+            detail = str(error)
+            error_path = log_ai_error(f"Resumen breve fallido.\nDetalle: {detail}\n")
+            show_error(f"{SUMMARY_ERROR}\n\nDetalle: {detail}\n\nHe guardado el detalle en {error_path}")
+            return None
+        self.show(summary)
+        return summary
+
+    @staticmethod
+    def show(summary: BriefSummary) -> None:
+        """Show the brief summary in a panel."""
+        print()
+        console.print(
+            Panel(summary.text, title=f"Resumen breve de {summary.title}", border_style="blue")
+        )
+
+    @staticmethod
+    def ask_format() -> str:
+        """Ask in which format the summary is saved, apart from the enriched text."""
+        return EXPORT_FORMATS[ask_option(SUMMARY_FORMAT_QUESTION, EXPORT_FORMATS)]
+
+
+def summary_path(path: str, summary_format: str) -> str:
+    """Return the summary path, next to the enriched text file."""
+    base, _ = os.path.splitext(path)
+    return f"{base}{SUMMARY_SUFFIX}{EXTENSIONS[summary_format]}"
+
+
 def export_research(
-    orchestrator: WikiEnrichmentOrchestrator, content: EnrichedContent
+    orchestrator: WikiEnrichmentOrchestrator,
+    content: EnrichedContent,
+    summary: Optional[BriefSummary] = None,
 ) -> tuple[str, str]:
     if ask_option(EXPORT_QUESTION, [YES, NO]) == NO:
         return NOT_EXPORTED, NO_FILE
     export_format = EXPORT_FORMATS[ask_option(FORMAT_QUESTION, EXPORT_FORMATS)]
     file_name = ask_file_name(export_format)
+    # Se mantiene la ruta relativa ("output/...") porque los tests y el
+    # resumen la esperan así; para evitar abrir un TXT viejo, tras exportar
+    # se muestra la ruta absoluta real donde se escribió el archivo.
     path = f"{EXPORT_FOLDER}/{file_name}"
+    steps: list[Step] = [(
+        f"Exportando {file_name}...",
+        lambda: orchestrator.export_document(content, export_format, path),
+    )]
+    if summary:
+        summary_format = BriefSummaryFlow.ask_format()
+        summary_file = summary_path(path, summary_format)
+        steps.append((
+            f"Exportando {os.path.basename(summary_file)}...",
+            lambda: orchestrator.export_summary(summary, summary_format, summary_file),
+        ))
     try:
         print()
-        run_steps([(
-            f"Exportando {file_name}...",
-            lambda: orchestrator.export_document(content, export_format, path),
-        )])
+        run_steps(steps)
     except WikiEnrichmentError:
         print()
         show_error("No he podido guardar el archivo. Revisa que tienes permisos y espacio en disco.")
         return NOT_EXPORTED, NO_FILE
+    console.print(f"[dim]Archivo guardado en {Path(path).resolve()}[/]")
     return export_format, path
 
 
@@ -325,7 +424,10 @@ def run_app(tema: Optional[str], idioma: Optional[str]) -> None:
         show_enriched(ai_summary)
     translated_summary = translate_text(language)
     content = build_content(article, ai_summary, translated_summary)
-    export_format, file_name = export_research(orchestrator, content)
+    summary = None
+    if ai_summary:
+        summary = BriefSummaryFlow(orchestrator).request(content, language)
+    export_format, file_name = export_research(orchestrator, content, summary)
 
     show_summary(topic, language, export_format, file_name)
     say_goodbye()

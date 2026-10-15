@@ -29,6 +29,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+
 # Test and coverage artifacts
 .pytest_cache/
 .mypy_cache/
@@ -66,3 +67,5 @@ Desktop.ini
 # Team's documentation
 INSTALACION.md
 SOUL.md
+diagnostico_env.py
+prueba_deepseek.py
