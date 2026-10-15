@@ -1,4 +1,4 @@
-"""Tests for loading local environment configuration at startup."""
+﻿"""Tests for loading local environment configuration at startup."""
 
 from pathlib import Path
 
@@ -16,23 +16,25 @@ def test_load_local_env_file_reads_utf8_sig_keys(
     tmp_path: Path, monkeypatch
 ) -> None:
     module_path = _write_bootstrap_at(tmp_path)
-    (tmp_path / ".env").write_text("\ufeffRAPIDAPI_KEY=from-dotenv\n", encoding="utf-8")
+    (tmp_path / ".env").write_text(
+        "\ufeffGOOGLE_TRANSLATE_API_KEY=from-dotenv\n", encoding="utf-8"
+    )
     monkeypatch.setattr(bootstrap, "__file__", str(module_path))
-    monkeypatch.delenv("RAPIDAPI_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_TRANSLATE_API_KEY", raising=False)
 
     bootstrap._load_local_env_file()
 
-    assert bootstrap.os.getenv("RAPIDAPI_KEY") == "from-dotenv"
+    assert bootstrap.os.getenv("GOOGLE_TRANSLATE_API_KEY") == "from-dotenv"
 
 
 def test_load_local_env_file_does_not_override_existing_values(
     tmp_path: Path, monkeypatch
 ) -> None:
     module_path = _write_bootstrap_at(tmp_path)
-    (tmp_path / ".env").write_text("RAPIDAPI_KEY=from-dotenv\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("GOOGLE_TRANSLATE_API_KEY=from-dotenv\n", encoding="utf-8")
     monkeypatch.setattr(bootstrap, "__file__", str(module_path))
-    monkeypatch.setenv("RAPIDAPI_KEY", "already-set")
+    monkeypatch.setenv("GOOGLE_TRANSLATE_API_KEY", "already-set")
 
     bootstrap._load_local_env_file()
 
-    assert bootstrap.os.getenv("RAPIDAPI_KEY") == "already-set"
+    assert bootstrap.os.getenv("GOOGLE_TRANSLATE_API_KEY") == "already-set"

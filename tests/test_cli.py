@@ -119,7 +119,7 @@ def test_translator_timeout_is_reported_and_exits(orchestrator, summary) -> None
     result = run_cli(OPTIONS, "N\n")
 
     assert result.exit_code == 1
-    assert "DeepTranslate ha tardado demasiado" in result.output
+    assert "Google Translate ha tardado demasiado" in result.output
     summary.assert_not_called()
 
 
@@ -129,7 +129,7 @@ def test_translation_failure_is_reported_and_exits(orchestrator, summary) -> Non
     result = run_cli(OPTIONS, "N\n")
 
     assert result.exit_code == 1
-    assert "No he podido traducir el contenido con DeepTranslate" in result.output
+    assert "No he podido traducir el contenido con Google Translate" in result.output
     assert "provider unavailable" in result.output
     summary.assert_not_called()
 
@@ -214,7 +214,7 @@ def test_full_flow_with_adapters_translates_after_searching_spanish_wikipedia(
     translation_response = make_response(
         json_data={"data": {"translations": [{"translatedText": "A language."}]}}
     )
-    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+    monkeypatch.setenv("GOOGLE_TRANSLATE_API_KEY", "test-key")
 
     with patch(GET, side_effect=responses) as mock_get:
         with patch(TRANSLATION_POST, return_value=translation_response) as mock_post:
@@ -230,4 +230,5 @@ def test_full_flow_with_adapters_translates_after_searching_spanish_wikipedia(
         "target": "en",
         "format": "text",
     }
+    assert mock_post.call_args.kwargs["headers"]["x-goog-api-key"] == "test-key"
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED)

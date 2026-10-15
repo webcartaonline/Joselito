@@ -156,18 +156,18 @@ def translate_article(
         translated_text = run_steps(
             [
                 (
-                    f"Traduciendo a {language} con DeepTranslate...",
+                    f"Traduciendo a {language} con Google Translate...",
                     lambda: orchestrator.translate_article(article, language),
                 ),
             ]
         )[0]
     except ProviderTimeoutError:
         print()
-        show_error("DeepTranslate ha tardado demasiado. Inténtalo de nuevo más tarde.")
+        show_error("Google Translate ha tardado demasiado. Inténtalo de nuevo más tarde.")
         raise typer.Exit(code=1) from None
     except WikiEnrichmentError as exc:
         print()
-        show_error(f"No he podido traducir el contenido con DeepTranslate: {exc}")
+        show_error(f"No he podido traducir el contenido con Google Translate: {exc}")
         raise typer.Exit(code=1) from exc
 
     print()
