@@ -48,7 +48,7 @@ GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
 OPTIONS = ["--tema", "Python", "--idioma", "inglés"]
 EMPTY_TEXT_ERROR = "No has escrito nada. Inténtalo de nuevo."
 NETWORK_ERROR = "No he podido conectar con Wikipedia"
-WIKIPEDIA_SLOW = "Wikipedia está tardando demasiado en responder"
+WIKIPEDIA_SLOW = "Wikipedia está tardando demasiado"
 AI_SLOW = "La IA está tardando demasiado en responder"
 ANSI_CODES = re.compile(r"\x1b\[[0-9;]*m")
 

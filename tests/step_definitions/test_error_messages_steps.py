@@ -12,6 +12,13 @@ import re
 from contextlib import nullcontext
 
 import cli
+from tests.helpers.fake_time import FakeTime
+from tests.helpers.wikipedia_mocks import (
+    build_article_html,
+    make_article_response,
+    make_response,
+    make_results_response,
+)
 from tests.helpers.fake_adapters import (
     FakeContentEnricher,
     FakeDocumentExporter,
@@ -58,9 +65,26 @@ def skip_summary_question(monkeypatch):
 
 
 @pytest.fixture
-def context():
+def clock(monkeypatch):
+    """Replace the clock so countdowns finish at once."""
+    fake = FakeTime()
+    monkeypatch.setattr(cli, "time", fake)
+    return fake
+
+
+def working_wikipedia() -> list:
+    """Return the answers of a Wikipedia that works: the search and the article."""
+    return [
+        make_results_response([("Python", "Un lenguaje.")]),
+        make_article_response(build_article_html(["Un lenguaje de programación."])),
+    ]
+
+
+@pytest.fixture
+def context(clock):
     """Return a scenario context with services that work by default."""
     return {
+        "clock": clock,
         "wikipedia": FakeWikipediaSource(),
         "enricher": FakeContentEnricher(),
         "user_input": CONFIRM + NO_EXPORT,
@@ -72,6 +96,36 @@ def no_internet(context) -> None:
     """Use the real Wikipedia adapter, but make every request fail."""
     context["wikipedia"] = WikipediaSourceAdapter(language=cli.WIKIPEDIA_LANGUAGE)
     context["http_failure"] = requests.ConnectionError("Max retries exceeded")
+
+
+@given("the connection fails once and then works")
+def connection_comes_back(context) -> None:
+    """The first request fails, then Wikipedia answers normally."""
+    context["wikipedia"] = WikipediaSourceAdapter(language=cli.WIKIPEDIA_LANGUAGE)
+    context["http_failure"] = [requests.ConnectionError("Max retries exceeded")] + working_wikipedia()
+
+
+@given("Wikipedia is slow once and then works")
+def slow_once(context) -> None:
+    """The first request times out, then Wikipedia answers normally."""
+    context["wikipedia"] = WikipediaSourceAdapter(language=cli.WIKIPEDIA_LANGUAGE)
+    context["http_failure"] = [requests.Timeout("Read timed out")] + working_wikipedia()
+
+
+@given(parsers.parse("Wikipedia asks to wait {seconds:d} seconds and then works"))
+def rate_limited(context, seconds: int) -> None:
+    """The first answer is 429 (too many requests), then Wikipedia works."""
+    too_many = make_response(status_code=429)
+    too_many.headers = {"Retry-After": str(seconds)}
+    context["wikipedia"] = WikipediaSourceAdapter(language=cli.WIKIPEDIA_LANGUAGE)
+    context["http_failure"] = [too_many] + working_wikipedia()
+
+
+@given("the user presses a key during the countdown")
+def impatient_user(monkeypatch) -> None:
+    """The user presses a key once while waiting."""
+    keys = iter([True])
+    monkeypatch.setattr(cli, "key_was_pressed", lambda: next(keys, False))
 
 
 @given("Wikipedia takes too long to respond")
@@ -105,8 +159,9 @@ def run_app(context, options: list[str], user_input: str) -> None:
     )
     with patch("cli.build_orchestrator", return_value=orchestrator), patch(
         REQUESTS_GET, side_effect=context.get("http_failure")
-    ), context.get("ai_request", nullcontext()):
+    ) as get, context.get("ai_request", nullcontext()):
         context["result"] = runner.invoke(cli.app, options, input=user_input)
+    context["requests"] = get.call_count
 
 
 @given("an unexpected error happens while searching")
@@ -138,6 +193,13 @@ def research(context, topic: str) -> None:
     run_app(context, ["--tema", topic, "--idioma", LANGUAGE], context["user_input"])
 
 
+@when(parsers.parse('I research "{topic}" answering "{answers}"'))
+def research_answering(context, topic: str, answers: str) -> None:
+    """Give the topic and language as options and type these answers, in order."""
+    user_input = "".join(f"{answer.strip()}\n" for answer in answers.split(","))
+    run_app(context, ["--tema", topic, "--idioma", LANGUAGE], user_input)
+
+
 @when(parsers.re(r'I type the topic "(?P<topic>.*)" and then "(?P<valid_topic>.+)"'))
 def type_topic(context, topic: str, valid_topic: str) -> None:
     """Type a wrong topic, then a valid one when the app asks again."""
@@ -160,6 +222,18 @@ def message_is_shown(context, message: str) -> None:
 def only_valid_topic_is_searched(context, topic: str) -> None:
     """Wrong topics never reach Wikipedia."""
     assert context["wikipedia"].requested_topics == [topic]
+
+
+@then(parsers.parse("Wikipedia was asked {times:d} times"))
+def wikipedia_was_asked(context, times: int) -> None:
+    """The app tried exactly this many times."""
+    assert context["requests"] == times
+
+
+@then(parsers.parse("the countdown lasted {seconds:d} seconds"))
+def countdown_lasted(context, seconds: int) -> None:
+    """The countdown kept its pace even though the user pressed a key."""
+    assert seconds <= context["clock"].slept < seconds + 1
 
 
 @then("I do not see any technical error")

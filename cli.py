@@ -1,11 +1,16 @@
+import math
 import os
+import select
+import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
 import pyfiglet
 import typer
 from rich.console import Console, Group
+from rich.live import Live
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt
@@ -16,6 +21,7 @@ from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.bootstrap import build_orchestrator
 from wiki_enrichment.domain.exceptions import (
     ProviderTimeoutError,
+    RateLimitError,
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
@@ -41,6 +47,15 @@ CONFIRM_QUESTION = "¿Era esto lo que buscabas? (Y/N)"
 CHOOSE_QUESTION = "¿Cuál de estos buscabas? Escribe su número"
 RETYPE_OPTION = "Volver a escribir el tema"
 NO_DESCRIPTION = "(Wikipedia no cuenta con una descripción de este artículo)"
+RETRY_QUESTION = "¿Quieres reintentar? (Y/N)"
+RETRY_DOWNLOAD_QUESTION = "Wikipedia sigue tardando. ¿Quieres reintentar la descarga? (Y/N)"
+
+MAX_CONNECTION_ATTEMPTS = 3
+MAX_SLOW_ATTEMPTS = 3
+SLOW_ATTEMPTS_BEFORE_NEW_TOPIC = 2
+DEFAULT_RETRY_WAIT_SECONDS = 60  # Used when Wikipedia does not say how long to wait.
+COUNTDOWN_TICK_SECONDS = 0.1
+IS_WINDOWS = os.name == "nt"
 EMPTY_ANSWER_ERROR = "No has escrito nada. Inténtalo de nuevo."
 MAX_TOPIC_LENGTH = 300  # Longest search that Wikipedia accepts.
 
@@ -55,9 +70,33 @@ ENRICH_TIMEOUT_ERROR = (
     "La IA está tardando demasiado en responder. Inténtalo de nuevo más tarde. "
     "El documento se guardará sin el texto enriquecido."
 )
-WIKIPEDIA_TIMEOUT_ERROR = (
-    "Wikipedia está tardando demasiado en responder. Inténtalo de nuevo en unos minutos."
+WIKIPEDIA_RETRYING = "Wikipedia está tardando demasiado. Lo intento otra vez..."
+WIKIPEDIA_SLOW_NEW_TOPIC = (
+    "Wikipedia sigue tardando demasiado con '{topic}'. Prueba a escribir el tema de otra "
+    "manera, por ejemplo con menos palabras o sin faltas de ortografía."
 )
+WIKIPEDIA_SLOW_CHOOSE_OTHER = "Wikipedia sigue tardando demasiado con '{title}'. Elige otro resultado."
+WIKIPEDIA_TIMEOUT_ERROR = (
+    "Wikipedia no está respondiendo a tiempo. Seguramente tiene problemas ahora mismo. "
+    "Vuelve a abrir el programa dentro de unos minutos."
+)
+CONNECTION_ERROR = (
+    "No he podido conectar con Wikipedia (intento {attempt} de {total}). "
+    "Revisa tu conexión a internet."
+)
+CONNECTION_FINAL_ERROR = (
+    "No he podido conectar con Wikipedia después de {total} intentos. Puede que no tengas "
+    "internet o que Wikipedia no esté funcionando ahora mismo. Revisa tu conexión y vuelve "
+    "a abrir el programa más tarde."
+)
+RATE_LIMIT_ERROR = (
+    "Wikipedia ha recibido demasiadas peticiones y hay que esperar antes de volver a "
+    "intentarlo (intento {attempt} de {total})."
+)
+COUNTDOWN_MESSAGE = "Podrás reintentar en {seconds} segundos..."
+COUNTDOWN_DONE = "Ya puedes volver a intentarlo."
+PATIENCE_MESSAGE = "Paciencia, si no Wikipedia bloqueará esta IP"
+NO_RETRY_MESSAGE = "De acuerdo, no lo vuelvo a intentar. Vuelve a abrir el programa cuando quieras."
 CANCELLED_MESSAGE = "Has cancelado la investigación. Puedes volver a empezar cuando quieras."
 UNEXPECTED_ERROR = (
     "Ha ocurrido un error inesperado y no he podido continuar. "
@@ -259,40 +298,207 @@ def prefetch_article(
         return None
 
 
-def search_topic(
-    orchestrator: WikiEnrichmentOrchestrator, topic: str
-) -> tuple[list[SearchResult], Optional[ArticleContent]]:
-    """Search the topic and download its first result in advance."""
+@dataclass
+class WikipediaFailures:
+    """Failures in a row while talking to Wikipedia.
+
+    "No connection" and "too slow" are counted apart, and both go back to
+    zero as soon as something works.
+    """
+
+    connection: int = 0
+    slow: int = 0
+
+    def reset(self) -> None:
+        """Start counting again after a success."""
+        self.connection = 0
+        self.slow = 0
+
+
+def key_was_pressed() -> bool:
+    """Return True if the user pressed a key, and throw that key away.
+
+    Windows reads each key at once (msvcrt). Mac and Linux see what was typed
+    after Enter (select). If the input is not a real keyboard (for example, in
+    tests) nothing is read.
+    """
+    if IS_WINDOWS:
+        import msvcrt
+
+        pressed = False
+        while msvcrt.kbhit():
+            msvcrt.getwch()
+            pressed = True
+        return pressed
+    if not sys.stdin.isatty():
+        return False
+    pressed = False
+    while select.select([sys.stdin], [], [], 0)[0]:
+        if not sys.stdin.readline():
+            break
+        pressed = True
+    return pressed
+
+
+def discard_typed_keys() -> None:
+    """Throw away anything typed during the wait, so it does not answer the next question."""
+    if IS_WINDOWS:
+        key_was_pressed()
+    elif sys.stdin.isatty():
+        import termios
+
+        termios.tcflush(sys.stdin, termios.TCIFLUSH)
+
+
+def countdown_view(message: str, impatient: bool) -> Group:
+    """Return the countdown line, plus the patience message if the user pressed a key."""
+    lines = [Text(message, style="yellow")]
+    if impatient:
+        lines.append(Text(PATIENCE_MESSAGE, style="bold red"))
+    return Group(*lines)
+
+
+def wait_with_countdown(seconds: int) -> None:
+    """Count down before the user can retry.
+
+    Keys pressed meanwhile have no effect: they only show the patience
+    message and the countdown keeps its normal pace.
+    """
+    deadline = time.monotonic() + seconds
+    impatient = False
+    with Live(countdown_view(COUNTDOWN_MESSAGE.format(seconds=seconds), impatient), console=console) as live:
+        while (remaining := deadline - time.monotonic()) > 0:
+            if key_was_pressed():
+                impatient = True
+            live.update(countdown_view(COUNTDOWN_MESSAGE.format(seconds=math.ceil(remaining)), impatient))
+            time.sleep(COUNTDOWN_TICK_SECONDS)
+        live.update(countdown_view(COUNTDOWN_DONE, impatient))
+    discard_typed_keys()
+
+
+def stop_without_retrying() -> None:
+    """Close the program because the user does not want to try again."""
     print()
-    [results] = run_steps([
-        (f"Buscando '{topic}' en Wikipedia...", lambda: orchestrator.search_articles(topic)),
-    ])
-    [first_article] = run_steps([
-        (f"Preparando '{results[0].title}'...", lambda: prefetch_article(orchestrator, results[0].title)),
-    ])
-    return results, first_article
+    console.print(NO_RETRY_MESSAGE)
+    raise typer.Exit(code=1)
+
+
+def handle_connection_failure(failures: WikipediaFailures, error: WikiEnrichmentError) -> None:
+    """Count a failed connection and ask before trying again; close at the limit.
+
+    When Wikipedia asks to wait (too many requests), a countdown runs first.
+    """
+    failures.connection += 1
+    print()
+    if failures.connection >= MAX_CONNECTION_ATTEMPTS:
+        show_error(CONNECTION_FINAL_ERROR.format(total=MAX_CONNECTION_ATTEMPTS))
+        raise typer.Exit(code=1)
+    attempt = {"attempt": failures.connection, "total": MAX_CONNECTION_ATTEMPTS}
+    if isinstance(error, RateLimitError):
+        show_error(RATE_LIMIT_ERROR.format(**attempt))
+        wait_with_countdown(error.retry_after_seconds or DEFAULT_RETRY_WAIT_SECONDS)
+    else:
+        show_error(CONNECTION_ERROR.format(**attempt))
+    if ask_option(RETRY_QUESTION, [YES, NO]) == NO:
+        stop_without_retrying()
+
+
+def count_slow_answer(failures: WikipediaFailures) -> int:
+    """Count a slow answer and return how many there have been; close at the limit."""
+    failures.slow += 1
+    if failures.slow >= MAX_SLOW_ATTEMPTS:
+        print()
+        show_error(WIKIPEDIA_TIMEOUT_ERROR)
+        raise typer.Exit(code=1)
+    return failures.slow
+
+
+def say_retrying() -> None:
+    """Tell the user that Wikipedia was slow and it is being tried again."""
+    print()
+    console.print(f"[yellow]{WIKIPEDIA_RETRYING}[/]")
+
+
+def search_topic(
+    orchestrator: WikiEnrichmentOrchestrator, topic: str, failures: WikipediaFailures
+) -> tuple[list[SearchResult], Optional[ArticleContent], str]:
+    """Search the topic and download its first result in advance.
+
+    Returns the results, that first article (None if it could not be
+    downloaded) and the topic, which the user may have written again.
+    """
+    while True:
+        try:
+            print()
+            [results] = run_steps([
+                (f"Buscando '{topic}' en Wikipedia...", lambda: orchestrator.search_articles(topic)),
+            ])
+        except ResourceNotFoundError:
+            print()
+            show_error(f"No he encontrado nada sobre '{topic}' en Wikipedia. Prueba con otro tema.")
+            topic = ask_text(TOPIC_QUESTION, topic_error)
+            continue
+        except ProviderTimeoutError:
+            if count_slow_answer(failures) < SLOW_ATTEMPTS_BEFORE_NEW_TOPIC:
+                say_retrying()
+            else:
+                print()
+                show_error(WIKIPEDIA_SLOW_NEW_TOPIC.format(topic=topic))
+                topic = ask_text(TOPIC_QUESTION, topic_error)
+            continue
+        except WikiEnrichmentError as error:
+            handle_connection_failure(failures, error)
+            continue
+        failures.reset()
+        [first_article] = run_steps([
+            (f"Preparando '{results[0].title}'...", lambda: prefetch_article(orchestrator, results[0].title)),
+        ])
+        return results, first_article, topic
 
 
 def download_article(
-    orchestrator: WikiEnrichmentOrchestrator, title: str
+    orchestrator: WikiEnrichmentOrchestrator,
+    title: str,
+    failures: WikipediaFailures,
+    from_list: bool,
 ) -> Optional[ArticleContent]:
-    """Download the article the user chose, or return None if it cannot be opened."""
-    try:
-        print()
-        [article] = run_steps([
-            (f"Descargando '{title}'...", lambda: orchestrator.fetch_article_by_title(title)),
-        ])
+    """Download the chosen article, or return None to show the list again.
+
+    If Wikipedia is slow twice, a result from the list sends the user back
+    to the list; the confirmed first result asks whether to try again.
+    """
+    while True:
+        try:
+            print()
+            [article] = run_steps([
+                (f"Descargando '{title}'...", lambda: orchestrator.fetch_article_by_title(title)),
+            ])
+        except ResourceNotFoundError:
+            print()
+            show_error(f"No he podido abrir el artículo '{title}'. Elige otro resultado.")
+            return None
+        except ProviderTimeoutError:
+            if count_slow_answer(failures) < SLOW_ATTEMPTS_BEFORE_NEW_TOPIC:
+                say_retrying()
+            elif from_list:
+                print()
+                show_error(WIKIPEDIA_SLOW_CHOOSE_OTHER.format(title=title))
+                return None
+            elif ask_option(RETRY_DOWNLOAD_QUESTION, [YES, NO]) == NO:
+                stop_without_retrying()
+            continue
+        except WikiEnrichmentError as error:
+            handle_connection_failure(failures, error)
+            continue
+        failures.reset()
         return article
-    except ResourceNotFoundError:
-        print()
-        show_error(f"No he podido abrir el artículo '{title}'. Elige otro resultado.")
-        return None
 
 
 def choose_article(
     orchestrator: WikiEnrichmentOrchestrator,
     results: list[SearchResult],
     first_article: Optional[ArticleContent],
+    failures: WikipediaFailures,
 ) -> Optional[ArticleContent]:
     """Return the article the user confirms or picks, or None to write the topic again.
 
@@ -302,7 +508,9 @@ def choose_article(
     first = results[0]
     show_first_result(first)
     if ask_option(CONFIRM_QUESTION, [YES, NO]) == YES:
-        article = first_article or download_article(orchestrator, first.title)
+        article = first_article or download_article(
+            orchestrator, first.title, failures, from_list=False
+        )
         if article is not None:
             return article
     first_article = None  # Not wanted (or not available): forget it right away.
@@ -311,7 +519,7 @@ def choose_article(
         choice = ask_choice(others)
         if choice is None:
             return None
-        article = download_article(orchestrator, choice.title)
+        article = download_article(orchestrator, choice.title, failures, from_list=True)
         if article is not None:
             return article
 
@@ -320,23 +528,12 @@ def research_topic(
     orchestrator: WikiEnrichmentOrchestrator, topic: str
 ) -> tuple[ArticleContent, str]:
     """Search until the user confirms a result. Nothing is enriched before that."""
+    failures = WikipediaFailures()
     while True:
-        try:
-            results, first_article = search_topic(orchestrator, topic)
-            article = choose_article(orchestrator, results, first_article)
-            if article is not None:
-                return article, topic
-        except ResourceNotFoundError:
-            print()
-            show_error(f"No he encontrado nada sobre '{topic}' en Wikipedia. Prueba con otro tema.")
-        except ProviderTimeoutError:
-            print()
-            show_error(WIKIPEDIA_TIMEOUT_ERROR)
-            raise typer.Exit(code=1)
-        except WikiEnrichmentError:
-            print()
-            show_error("No he podido conectar con Wikipedia. Revisa tu conexión a internet e inténtalo más tarde.")
-            raise typer.Exit(code=1)
+        results, first_article, topic = search_topic(orchestrator, topic, failures)
+        article = choose_article(orchestrator, results, first_article, failures)
+        if article is not None:
+            return article, topic
         topic = ask_text(TOPIC_QUESTION, topic_error)
 
 

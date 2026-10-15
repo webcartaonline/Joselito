@@ -3,17 +3,47 @@ Feature: Clear messages when something fails (US 8.4)
   I want to receive clear and understandable messages when something fails
   So that I understand what happened and what to do next
 
-  Scenario: There is no internet connection (CA1)
+  Scenario: There is no internet connection, even after retrying (CA1)
     Given there is no internet connection
-    When I research "Python"
-    Then I see the message "No he podido conectar con Wikipedia"
+    When I research "Python" answering "Y, Y"
+    Then I see the message "No he podido conectar con Wikipedia (intento 1 de 3)"
+    And I see the message "No he podido conectar con Wikipedia después de 3 intentos"
+    And Wikipedia was asked 3 times
     And I do not see any technical error
     And the application ends in a controlled way
 
-  Scenario: Wikipedia takes too long to respond (CA2)
+  Scenario: The connection comes back after retrying (CA1)
+    Given the connection fails once and then works
+    When I research "Python" answering "Y, Y, N"
+    Then I see the message "intento 1 de 3"
+    And the application finishes normally
+
+  Scenario: The user decides not to retry (CA1)
+    Given there is no internet connection
+    When I research "Python" answering "N"
+    Then I see the message "De acuerdo, no lo vuelvo a intentar"
+    And the application ends in a controlled way
+
+  Scenario: Wikipedia asks to wait before retrying (CA2)
+    Given Wikipedia asks to wait 5 seconds and then works
+    And the user presses a key during the countdown
+    When I research "Python" answering "Y, Y, N"
+    Then I see the message "Wikipedia ha recibido demasiadas peticiones"
+    And I see the message "Paciencia, si no Wikipedia bloqueará esta IP"
+    And the countdown lasted 5 seconds
+    And the application finishes normally
+
+  Scenario: Wikipedia is slow once (CA2)
+    Given Wikipedia is slow once and then works
+    When I research "Python" answering "Y, N"
+    Then I see the message "Wikipedia está tardando demasiado. Lo intento otra vez..."
+    And the application finishes normally
+
+  Scenario: Wikipedia keeps being slow (CA2)
     Given Wikipedia takes too long to respond
-    When I research "Python"
-    Then I see the message "Wikipedia está tardando demasiado en responder"
+    When I research "Python" answering "Python lenguaje"
+    Then I see the message "Prueba a escribir el tema de otra manera"
+    And I see the message "Wikipedia no está respondiendo a tiempo"
     And I do not see any technical error
     And the application ends in a controlled way
 
