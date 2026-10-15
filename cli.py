@@ -1,3 +1,4 @@
+import logging
 import math
 import os
 import select
@@ -31,6 +32,13 @@ from wiki_enrichment.domain.models import (
     EnrichedContent,
     SearchResult,
 )
+from wiki_enrichment.infrastructure.logging_config import (
+    LOGGER_NAME,
+    configure_logging,
+    generate_run_id,
+)
+
+logger = logging.getLogger(f"{LOGGER_NAME}.cli")
 
 WIKIPEDIA_LANGUAGE = "es"
 BANNER_FONT = "larry3d"
@@ -207,6 +215,13 @@ def ask_text(
         answer = None
 
 
+def ask_topic(answer: Optional[str] = None) -> str:
+    """Ask for a topic until it is valid and log which one was chosen."""
+    topic = ask_text(TOPIC_QUESTION, topic_error, answer)
+    logger.info("Topic selected: %s", topic)
+    return topic
+
+
 def ask_option(question: str, options: list[str] | dict[str, str]) -> str:
     valid_options = " o ".join(options)
     while True:
@@ -278,10 +293,16 @@ def show_options(results: list[SearchResult]) -> None:
 
 def ask_choice(results: list[SearchResult]) -> Optional[SearchResult]:
     """Return the result the user picks, or None if they want to write the topic again."""
+    logger.info("Showing other results: count=%d", len(results))
+    logger.debug("Other results: %s", [result.title for result in results])
     show_options(results)
     options = [str(number) for number in range(1, len(results) + 2)]
     index = int(ask_option(CHOOSE_QUESTION, options)) - 1
-    return results[index] if index < len(results) else None
+    if index >= len(results):
+        logger.info("The user wants to write the topic again")
+        return None
+    logger.info("Result chosen from the list: title=%s", results[index].title)
+    return results[index]
 
 
 def prefetch_article(
@@ -436,7 +457,7 @@ def search_topic(
         except ResourceNotFoundError:
             print()
             show_error(f"No he encontrado nada sobre '{topic}' en Wikipedia. Prueba con otro tema.")
-            topic = ask_text(TOPIC_QUESTION, topic_error)
+            topic = ask_topic()
             continue
         except ProviderTimeoutError:
             if count_slow_answer(failures) < SLOW_ATTEMPTS_BEFORE_NEW_TOPIC:
@@ -444,7 +465,7 @@ def search_topic(
             else:
                 print()
                 show_error(WIKIPEDIA_SLOW_NEW_TOPIC.format(topic=topic))
-                topic = ask_text(TOPIC_QUESTION, topic_error)
+                topic = ask_topic()
             continue
         except WikiEnrichmentError as error:
             handle_connection_failure(failures, error)
@@ -506,13 +527,18 @@ def choose_article(
     function: when it returns, Python frees whatever was not chosen.
     """
     first = results[0]
+    logger.info("Confirming the first result: title=%s", first.title)
     show_first_result(first)
     if ask_option(CONFIRM_QUESTION, [YES, NO]) == YES:
+        logger.info("First result confirmed: title=%s", first.title)
         article = first_article or download_article(
             orchestrator, first.title, failures, from_list=False
         )
         if article is not None:
             return article
+        logger.info("Confirmed result unavailable; showing the other results")
+    else:
+        logger.info("First result rejected: title=%s", first.title)
     first_article = None  # Not wanted (or not available): forget it right away.
     others = results[1:]
     while True:
@@ -534,7 +560,7 @@ def research_topic(
         article = choose_article(orchestrator, results, first_article, failures)
         if article is not None:
             return article, topic
-        topic = ask_text(TOPIC_QUESTION, topic_error)
+        topic = ask_topic()
 
 
 def file_name_error(name: str) -> Optional[str]:
@@ -729,8 +755,9 @@ def run_app(tema: Optional[str], idioma: Optional[str]) -> None:
     show_banner("Hola, soy")
     show_banner("Joselito")
 
-    topic = ask_text(TOPIC_QUESTION, topic_error, tema)
+    topic = ask_topic(tema)
     language = ask_text(LANGUAGE_QUESTION, language_error, idioma)
+    logger.info("Target language selected: %s", language)
 
     orchestrator = build_orchestrator(wikipedia_language=WIKIPEDIA_LANGUAGE)
     article, topic = research_topic(orchestrator, topic)
@@ -744,6 +771,7 @@ def run_app(tema: Optional[str], idioma: Optional[str]) -> None:
     if ai_summary:
         summary = BriefSummaryFlow(orchestrator).request(content, language)
     export_format, file_name = export_research(orchestrator, content, summary)
+    logger.info("Export result: format=%s file=%s", export_format, file_name)
 
     show_summary(topic, language, export_format, file_name)
     say_goodbye()
@@ -755,18 +783,24 @@ def main(
     idioma: Optional[str] = typer.Option(None, help="Idioma de la traducción"),
 ):
     """Joselito: investiga un tema en Wikipedia, lo enriquece y lo traduce."""
+    configure_logging(run_id=generate_run_id())
+    logger.info("Application started")
     try:
         run_app(tema, idioma)
     except typer.Exit:
+        logger.info("Application finished with errors")
         raise
     except (KeyboardInterrupt, EOFError):
+        logger.info("Application cancelled by the user")
         print()
         show_error(CANCELLED_MESSAGE)
         raise typer.Exit(code=1)
     except Exception:
+        logger.critical("Unexpected error", exc_info=True)
         print()
         show_error(UNEXPECTED_ERROR)
         raise typer.Exit(code=1)
+    logger.info("Application finished")
 
 
 if __name__ == "__main__":

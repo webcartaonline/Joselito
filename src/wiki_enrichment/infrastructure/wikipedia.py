@@ -1,4 +1,6 @@
+"""Wikipedia source adapter: searches a topic and scrapes the article."""
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from urllib.parse import quote
@@ -53,15 +55,20 @@ def domain_errors() -> Iterator[None]:
     except requests.RequestException as exc:
         raise WikiEnrichmentError(f"Could not reach Wikipedia: {exc}") from exc
 
+logger = logging.getLogger(__name__)
+
 
 class WikipediaSourceAdapter:
-
+    """Fetch the title and first paragraphs of a Wikipedia article."""
 
     def __init__(self, language: str = "en") -> None:
+        self._language = language
         self._base_url = f"https://{language}.wikipedia.org"
 
     def fetch_article(self, topic: str) -> ArticleContent:
-
+        logger.info(
+            "Searching Wikipedia: topic=%s language=%s", topic, self._language
+        )
         try:
             title = self._search_title(topic)
             html = self._download_article(title)
@@ -73,6 +80,7 @@ class WikipediaSourceAdapter:
         paragraphs = self._extract_paragraphs(html)
         if not paragraphs:
             raise ResourceNotFoundError(f"No content found for '{topic}'")
+        logger.info("Article ready: title=%s paragraphs=%d", title, len(paragraphs))
 
         return ArticleContent(title=title, paragraphs=paragraphs)
 
@@ -182,6 +190,11 @@ class WikipediaSourceAdapter:
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
+        logger.debug(
+            "Search request finished: topic=%s status=%d",
+            topic,
+            response.status_code,
+        )
         try:
             payload = response.json()
         except ValueError as exc:
@@ -203,9 +216,11 @@ class WikipediaSourceAdapter:
             raise WikiEnrichmentError("Invalid Wikipedia response") from exc
         if not isinstance(title, str) or not title:
             raise WikiEnrichmentError("Invalid Wikipedia response")
+        logger.debug("Article selected: title=%s", title)
         return title
 
     def _download_article(self, title: str) -> str:
+        logger.debug("Downloading article: title=%s", title)
         slug = quote(title.replace(" ", "_"), safe="()")
         response = requests.get(
             f"{self._base_url}/wiki/{slug}",
@@ -215,6 +230,12 @@ class WikipediaSourceAdapter:
         if response.status_code == 404:
             raise ResourceNotFoundError(f"Article '{title}' not found")
         check_status(response)
+        logger.debug(
+            "Article downloaded: title=%s status=%d bytes=%d",
+            title,
+            response.status_code,
+            len(response.text),
+        )
         return response.text
 
     @staticmethod

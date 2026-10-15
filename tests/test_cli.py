@@ -1,5 +1,6 @@
 """Tests for the interactive command-line interface."""
 
+import logging
 import re
 from unittest.mock import MagicMock, create_autospec, patch
 
@@ -26,6 +27,7 @@ from wiki_enrichment.domain.exceptions import (
 from wiki_enrichment.domain.models import ArticleContent, EnrichedContent, SearchResult
 from wiki_enrichment.domain.ports import ContentSummarizer
 from wiki_enrichment.infrastructure.exporters import EMPTY_SECTION_TEXT, DocumentExporterAdapter
+from wiki_enrichment.infrastructure.logging_config import LOGGER_NAME
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
 RESULTS = [SearchResult("Python", "Un lenguaje de programación.")]
@@ -87,6 +89,23 @@ def no_real_ai_token(monkeypatch):
 def skip_summary_question(monkeypatch):
     """The summary question is tested in test_cli_summary.py, so these tests skip it."""
     monkeypatch.setattr(cli.BriefSummaryFlow, "request", lambda self, content, language: None)
+
+@pytest.fixture(autouse=True)
+def isolated_logs(monkeypatch, tmp_path):
+    """Send application logs to a temporary folder and clean them up."""
+    logger = logging.getLogger(LOGGER_NAME)
+    monkeypatch.chdir(tmp_path)
+    yield
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
+
+
+def read_log(workspace) -> str:
+    """Return the contents of the run's log file."""
+    [log_file] = (workspace / "logs").glob("app_*.log")
+    return log_file.read_text(encoding="utf-8")
+
 
 @pytest.fixture
 def orchestrator():
@@ -570,3 +589,87 @@ def test_real_adapters_without_token_still_export_the_original(tmp_path, monkeyp
     assert result.exit_code == 0, result.output
     assert "No he podido enriquecer el texto con IA" in result.output
     assert "Un lenguaje." in read_document(tmp_path / "apuntes.txt")
+
+
+RUN_ID_LINE = re.compile(
+    r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| INFO \| [0-9a-f]{8} \|"
+)
+LOG_FILE_NAME_PATTERN = re.compile(r"^app_[0-9a-f]{8}\.log$")
+
+
+def test_application_start_and_finish_are_logged(tmp_path, orchestrator) -> None:
+    result = run_cli(OPTIONS, "Y\nN\n")
+
+    assert result.exit_code == 0, result.output
+    content = read_log(tmp_path)
+    assert "Application started" in content
+    assert "Application finished" in content
+
+
+def test_selected_topic_and_language_are_logged(tmp_path, orchestrator) -> None:
+    run_cli(OPTIONS, "Y\nN\n")
+
+    content = read_log(tmp_path)
+    assert "Topic selected: Python" in content
+    assert "Target language selected: inglés" in content
+
+
+def test_each_log_line_contains_a_run_id(tmp_path, orchestrator) -> None:
+    run_cli(OPTIONS, "Y\nN\n")
+
+    assert RUN_ID_LINE.search(read_log(tmp_path))
+
+
+def test_log_file_is_named_after_the_run(tmp_path, orchestrator) -> None:
+    result = run_cli(OPTIONS, "Y\nN\n")
+
+    assert result.exit_code == 0, result.output
+    [log_file] = (tmp_path / "logs").glob("app_*.log")
+    assert LOG_FILE_NAME_PATTERN.match(log_file.name)
+    run_id = log_file.name.removeprefix("app_").removesuffix(".log")
+    assert f"| {run_id} |" in log_file.read_text(encoding="utf-8")
+
+
+def test_unexpected_error_is_logged_as_critical(tmp_path, orchestrator) -> None:
+    orchestrator.search_articles.side_effect = RuntimeError("boom")
+
+    result = run_cli(OPTIONS, "N\n")
+
+    assert result.exit_code == 1
+    content = read_log(tmp_path)
+    assert "| CRITICAL |" in content
+    assert "Unexpected error" in content
+
+
+def test_confirmation_question_and_answer_are_logged(tmp_path, orchestrator) -> None:
+    result = run_cli(OPTIONS, "Y\nN\n")
+
+    assert result.exit_code == 0, result.output
+    content = read_log(tmp_path)
+    assert "Confirming the first result: title=Python" in content
+    assert "First result confirmed: title=Python" in content
+
+
+def test_rejected_result_options_and_new_topic_are_logged(tmp_path, orchestrator) -> None:
+    orchestrator.search_articles.side_effect = [TREE_RESULTS, RESULTS]
+
+    result = run_cli(
+        ["--tema", "Alboles", "--idioma", "inglés"], "N\n6\nPython\nY\nN\n"
+    )
+
+    assert result.exit_code == 0, result.output
+    content = read_log(tmp_path)
+    assert "First result rejected: title=Árbol" in content
+    assert "Showing other results: count=5" in content
+    assert "The user wants to write the topic again" in content
+    assert "Topic selected: Python" in content
+
+
+def test_chosen_result_from_the_list_is_logged(tmp_path, orchestrator) -> None:
+    orchestrator.search_articles.return_value = TREE_RESULTS
+    orchestrator.fetch_article_by_title.side_effect = [TREE, ARTICLE]
+
+    result = run_cli(OPTIONS, "N\n3\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Result chosen from the list: title=Árbol genealógico" in read_log(tmp_path)
