@@ -13,12 +13,18 @@ from wiki_enrichment.domain.exceptions import (
     ProviderTimeoutError,
     SummarizationError,
 )
-from wiki_enrichment.domain.models import ArticleContent, BriefSummary, EnrichedContent
+from wiki_enrichment.domain.models import (
+    ArticleContent,
+    BriefSummary,
+    EnrichedContent,
+    SearchResult,
+)
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
 CONTENT = EnrichedContent(original_article=ARTICLE, ai_summary="Enriched text.")
 SUMMARY = BriefSummary(title="Python", text="Brief.", translated_text="Breve.")
 OPTIONS = ["--tema", "Python", "--idioma", "inglés"]
+CONFIRM = "Y\n"  # Answer to "¿Era esto lo que buscabas?"
 
 runner = CliRunner()
 
@@ -41,7 +47,8 @@ def no_real_ai_token(monkeypatch):
 @pytest.fixture
 def orchestrator():
     fake = create_autospec(WikiEnrichmentOrchestrator, instance=True)
-    fake.fetch_article.return_value = ARTICLE
+    fake.search_articles.return_value = [SearchResult("Python", "Un lenguaje.")]
+    fake.fetch_article_by_title.return_value = ARTICLE
     fake.enrich_article.return_value = CONTENT
     fake.summarize.return_value = SUMMARY
     with patch("cli.build_orchestrator", return_value=fake):
@@ -143,7 +150,7 @@ def test_export_research_saves_nothing_when_the_user_declines(monkeypatch) -> No
 
 
 def test_full_flow_exports_the_text_and_the_summary(orchestrator) -> None:
-    result = runner.invoke(cli.app, OPTIONS, input="Y\nY\nP\napuntes\nT\n")
+    result = runner.invoke(cli.app, OPTIONS, input=CONFIRM + "Y\nY\nP\napuntes\nT\n")
 
     assert result.exit_code == 0, result.output
     orchestrator.summarize.assert_called_once_with(CONTENT, "inglés")
@@ -152,7 +159,7 @@ def test_full_flow_exports_the_text_and_the_summary(orchestrator) -> None:
 
 
 def test_full_flow_without_summary_skips_it(orchestrator) -> None:
-    result = runner.invoke(cli.app, OPTIONS, input="N\nN\n")
+    result = runner.invoke(cli.app, OPTIONS, input=CONFIRM + "N\nN\n")
 
     assert result.exit_code == 0, result.output
     orchestrator.summarize.assert_not_called()
@@ -162,7 +169,7 @@ def test_full_flow_without_summary_skips_it(orchestrator) -> None:
 def test_full_flow_keeps_going_when_the_summary_fails(orchestrator) -> None:
     orchestrator.summarize.side_effect = SummarizationError("no token")
 
-    result = runner.invoke(cli.app, OPTIONS, input="Y\nN\n")
+    result = runner.invoke(cli.app, OPTIONS, input=CONFIRM + "Y\nN\n")
 
     assert result.exit_code == 0, result.output
     assert "No he podido generar el resumen breve" in result.output
@@ -172,7 +179,7 @@ def test_full_flow_keeps_going_when_the_summary_fails(orchestrator) -> None:
 def test_full_flow_does_not_offer_a_summary_without_enriched_text(orchestrator) -> None:
     orchestrator.enrich_article.side_effect = EnrichmentError("no token")
 
-    result = runner.invoke(cli.app, OPTIONS, input="N\n")
+    result = runner.invoke(cli.app, OPTIONS, input=CONFIRM + "N\n")
 
     assert result.exit_code == 0, result.output
     assert cli.SUMMARY_QUESTION not in result.output

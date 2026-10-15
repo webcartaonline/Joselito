@@ -16,7 +16,6 @@ from tests.helpers.fake_adapters import (
     FakeWikipediaSource,
 )
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.ports import ContentSummarizer
 from wiki_enrichment.domain.exceptions import (
     EnrichmentError,
     ExportError,
@@ -24,11 +23,24 @@ from wiki_enrichment.domain.exceptions import (
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from wiki_enrichment.domain.models import ArticleContent, EnrichedContent, SearchResult
 from wiki_enrichment.domain.ports import ContentSummarizer
 from wiki_enrichment.infrastructure.exporters import EMPTY_SECTION_TEXT, DocumentExporterAdapter
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
+RESULTS = [SearchResult("Python", "Un lenguaje de programación.")]
+TREE_RESULTS = [
+    SearchResult("Árbol", "Una planta de tallo leñoso."),
+    SearchResult("Árboles del Paraíso", "Un árbol del Edén."),
+    SearchResult("Dos Árboles de Valinor", "Árboles de Tolkien."),
+    SearchResult("Árbol genealógico", "Un esquema familiar."),
+    SearchResult("Árbol de decisión", ""),
+    SearchResult("Árbol (informática)", "Un tipo de datos."),
+]
+TREE = ArticleContent("Árbol", ["Una planta."])
+SEARCH_PAYLOAD = {
+    "query": {"pages": [{"title": "Python", "index": 1, "extract": "Un lenguaje."}]}
+}
 AI_TEXT = "Python es un lenguaje muy usado para aprender a programar."
 ENRICHED = EnrichedContent(original_article=ARTICLE, ai_summary=AI_TEXT)
 CONTENT = EnrichedContent(original_article=ARTICLE, ai_summary=AI_TEXT, translated_summary="")
@@ -79,7 +91,8 @@ def skip_summary_question(monkeypatch):
 @pytest.fixture
 def orchestrator():
     fake = create_autospec(WikiEnrichmentOrchestrator, instance=True)
-    fake.fetch_article.return_value = ARTICLE
+    fake.search_articles.return_value = RESULTS
+    fake.fetch_article_by_title.return_value = ARTICLE
     fake.enrich_article.return_value = ENRICHED
     with patch("cli.build_orchestrator", return_value=fake):
         yield fake
@@ -104,31 +117,159 @@ def test_unknown_option_is_rejected_with_a_usage_error(orchestrator) -> None:
     result = run_cli(["--color", "rojo"])
 
     assert result.exit_code == 2
-    orchestrator.fetch_article.assert_not_called()
+    orchestrator.search_articles.assert_not_called()
 
 
 def test_options_skip_the_topic_and_language_questions(orchestrator, summary) -> None:
-    result = run_cli(OPTIONS, "N\n")
+    result = run_cli(OPTIONS, "Y\nN\n")
 
     assert result.exit_code == 0, result.output
     assert cli.TOPIC_QUESTION not in result.output
     assert cli.LANGUAGE_QUESTION not in result.output
-    orchestrator.fetch_article.assert_called_once_with("Python")
+    orchestrator.search_articles.assert_called_once_with("Python")
+    orchestrator.fetch_article_by_title.assert_called_once_with("Python")
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
 def test_missing_options_are_asked_interactively(orchestrator, summary) -> None:
-    result = run_cli(user_input="Python\ninglés\nN\n")
+    result = run_cli(user_input="Python\ninglés\nY\nN\n")
 
     assert result.exit_code == 0, result.output
     assert cli.TOPIC_QUESTION in result.output
     assert cli.LANGUAGE_QUESTION in result.output
-    orchestrator.fetch_article.assert_called_once_with("Python")
+    orchestrator.search_articles.assert_called_once_with("Python")
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
 
-def test_successful_run_shows_article_summary_and_goodbye(orchestrator) -> None:
+def test_first_result_is_shown_with_its_summary_and_confirmed(orchestrator, summary) -> None:
+    result = run_cli(OPTIONS, "Y\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Primer resultado: Python" in result.output
+    assert "Un lenguaje de programación." in result.output
+    assert cli.CONFIRM_QUESTION in result.output
+
+
+def test_confirmed_first_result_is_not_downloaded_twice(orchestrator, summary) -> None:
+    result = run_cli(OPTIONS, "Y\nN\n")
+
+    assert result.exit_code == 0, result.output
+    orchestrator.fetch_article_by_title.assert_called_once_with("Python")
+
+
+def test_nothing_is_enriched_before_the_user_confirms(orchestrator, summary) -> None:
+    orchestrator.search_articles.return_value = TREE_RESULTS
+
     result = run_cli(OPTIONS, "N\n")
+
+    assert result.exit_code == 1
+    orchestrator.enrich_article.assert_not_called()
+
+
+def test_result_without_summary_says_so(orchestrator, summary) -> None:
+    orchestrator.search_articles.return_value = [SearchResult("Python")]
+
+    result = run_cli(OPTIONS, "Y\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Primer resultado: Python" in result.output
+    assert cli.NO_DESCRIPTION in result.output
+
+
+def test_invalid_confirmation_is_asked_again(orchestrator, summary) -> None:
+    result = run_cli(OPTIONS, "\nX\nY\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "No has escrito nada. Escribe Y o N." in result.output
+    assert "'X' no es una opción válida. Escribe Y o N." in result.output
+
+
+def test_rejected_result_shows_the_other_results_numbered(orchestrator, summary) -> None:
+    orchestrator.search_articles.return_value = TREE_RESULTS
+    orchestrator.fetch_article_by_title.side_effect = [TREE, ARTICLE]
+
+    result = run_cli(OPTIONS, "N\n3\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Otros resultados" in result.output
+    for number, tree in enumerate(TREE_RESULTS[1:], start=1):
+        assert re.search(rf"{number}\. {re.escape(tree.title)}", result.output)
+    assert re.search(rf"6\. {cli.RETYPE_OPTION}", result.output)
+    assert "Un árbol del Edén." in result.output
+    assert cli.NO_DESCRIPTION in result.output
+    titles = [call.args[0] for call in orchestrator.fetch_article_by_title.call_args_list]
+    assert titles == ["Árbol", "Árbol genealógico"]
+
+
+def test_invalid_number_is_asked_again(orchestrator, summary) -> None:
+    orchestrator.search_articles.return_value = TREE_RESULTS
+
+    result = run_cli(OPTIONS, "N\n7\ndos\n\n1\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "'7' no es una opción válida." in result.output
+    assert "'DOS' no es una opción válida." in result.output
+    assert "No has escrito nada." in result.output
+    orchestrator.fetch_article_by_title.assert_called_with("Árboles del Paraíso")
+
+
+def test_retype_option_asks_for_the_topic_again(orchestrator, summary) -> None:
+    orchestrator.search_articles.side_effect = [TREE_RESULTS, RESULTS]
+
+    result = run_cli(["--tema", "Alboles", "--idioma", "inglés"], "N\n6\nPython\nY\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert cli.TOPIC_QUESTION in result.output
+    calls = [call.args for call in orchestrator.search_articles.call_args_list]
+    assert calls == [("Alboles",), ("Python",)]
+
+
+def test_with_a_single_result_only_the_retype_option_is_offered(orchestrator, summary) -> None:
+    orchestrator.search_articles.side_effect = [[SearchResult("Molisol", "Un suelo.")], RESULTS]
+
+    result = run_cli(["--tema", "Alboles", "--idioma", "inglés"], "N\n1\nPython\nY\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert re.search(rf"1\. {cli.RETYPE_OPTION}", result.output)
+
+
+def test_failed_prefetch_downloads_after_the_yes(orchestrator, summary) -> None:
+    orchestrator.fetch_article_by_title.side_effect = [WikiEnrichmentError("offline"), ARTICLE]
+
+    result = run_cli(OPTIONS, "Y\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert orchestrator.fetch_article_by_title.call_count == 2
+    assert "A programming language." in result.output
+
+
+def test_article_that_cannot_be_opened_sends_back_to_the_list(orchestrator, summary) -> None:
+    orchestrator.search_articles.return_value = TREE_RESULTS
+    orchestrator.fetch_article_by_title.side_effect = [
+        TREE, ResourceNotFoundError("missing"), ARTICLE,
+    ]
+
+    result = run_cli(OPTIONS, "N\n2\n4\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "No he podido abrir el artículo 'Dos Árboles de Valinor'" in result.output
+    assert result.output.count("Otros resultados") == 2
+
+
+def test_confirmed_article_that_cannot_be_opened_offers_the_list(orchestrator, summary) -> None:
+    orchestrator.search_articles.return_value = TREE_RESULTS
+    orchestrator.fetch_article_by_title.side_effect = [
+        WikiEnrichmentError("offline"), ResourceNotFoundError("missing"), ARTICLE,
+    ]
+
+    result = run_cli(OPTIONS, "Y\n1\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Otros resultados" in result.output
+
+
+def test_successful_run_shows_article_summary_and_goodbye(orchestrator) -> None:
+    result = run_cli(OPTIONS, "Y\nN\n")
 
     assert result.exit_code == 0, result.output
     assert "A programming language." in result.output
@@ -137,15 +278,15 @@ def test_successful_run_shows_article_summary_and_goodbye(orchestrator) -> None:
 
 
 def test_empty_topic_is_asked_again(orchestrator, summary) -> None:
-    result = run_cli(["--idioma", "inglés"], "\n   \nPython\nN\n")
+    result = run_cli(["--idioma", "inglés"], "\n   \nPython\nY\nN\n")
 
     assert result.exit_code == 0, result.output
     assert result.output.count(EMPTY_TEXT_ERROR) == 2
-    orchestrator.fetch_article.assert_called_once_with("Python")
+    orchestrator.search_articles.assert_called_once_with("Python")
 
 
 def test_empty_language_is_asked_again(orchestrator, summary) -> None:
-    result = run_cli(["--tema", "Python"], "\ninglés\nN\n")
+    result = run_cli(["--tema", "Python"], "\ninglés\nY\nN\n")
 
     assert result.exit_code == 0, result.output
     assert EMPTY_TEXT_ERROR in result.output
@@ -155,15 +296,15 @@ def test_empty_language_is_asked_again(orchestrator, summary) -> None:
 def test_too_long_topic_is_asked_again(orchestrator, summary) -> None:
     long_topic = "x" * (cli.MAX_TOPIC_LENGTH + 1)
 
-    result = run_cli(["--tema", long_topic, "--idioma", "inglés"], "Python\nN\n")
+    result = run_cli(["--tema", long_topic, "--idioma", "inglés"], "Python\nY\nN\n")
 
     assert result.exit_code == 0, result.output
     assert "El tema es demasiado largo" in result.output
-    orchestrator.fetch_article.assert_called_once_with("Python")
+    orchestrator.search_articles.assert_called_once_with("Python")
 
 
 def test_invalid_language_is_asked_again(orchestrator, summary) -> None:
-    result = run_cli(["--tema", "Python"], "123\ninglés\nN\n")
+    result = run_cli(["--tema", "Python"], "123\ninglés\nY\nN\n")
 
     assert result.exit_code == 0, result.output
     assert "'123' no es un idioma válido" in result.output
@@ -191,7 +332,7 @@ def test_language_error_accepts_valid_languages(language) -> None:
 
 
 def test_empty_or_invalid_export_answers_are_asked_again(orchestrator, summary) -> None:
-    result = run_cli(OPTIONS, "\nX\nN\n")
+    result = run_cli(OPTIONS, "Y\n\nX\nN\n")
 
     assert result.exit_code == 0, result.output
     assert "No has escrito nada. Escribe Y o N." in result.output
@@ -211,7 +352,7 @@ def test_empty_or_invalid_export_answers_are_asked_again(orchestrator, summary) 
 def test_chosen_format_and_file_name_are_exported(
     orchestrator, summary, answers, export_format, file_name
 ) -> None:
-    result = run_cli(OPTIONS, f"Y\n{answers}\n")
+    result = run_cli(OPTIONS, f"Y\nY\n{answers}\n")
 
     assert result.exit_code == 0, result.output
     assert cli.FILE_NAME_QUESTION in result.output
@@ -220,7 +361,7 @@ def test_chosen_format_and_file_name_are_exported(
 
 
 def test_no_export_does_not_ask_for_a_file_name(orchestrator, summary) -> None:
-    result = run_cli(OPTIONS, "N\n")
+    result = run_cli(OPTIONS, "Y\nN\n")
 
     assert result.exit_code == 0, result.output
     assert cli.FILE_NAME_QUESTION not in result.output
@@ -230,7 +371,7 @@ def test_no_export_does_not_ask_for_a_file_name(orchestrator, summary) -> None:
 def test_export_failure_shows_a_message(orchestrator, summary) -> None:
     orchestrator.export_document.side_effect = ExportError("disk full")
 
-    result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+    result = run_cli(OPTIONS, "Y\nY\nT\napuntes\n")
 
     assert result.exit_code == 0, result.output
     assert "No he podido guardar el archivo." in result.output
@@ -238,7 +379,7 @@ def test_export_failure_shows_a_message(orchestrator, summary) -> None:
 
 
 def test_invalid_file_names_are_asked_again(orchestrator, summary) -> None:
-    result = run_cli(OPTIONS, "Y\nP\n\nnotas?\ncon\nnotas.\nnotas\n")
+    result = run_cli(OPTIONS, "Y\nY\nP\n\nnotas?\ncon\nnotas.\nnotas\n")
 
     assert result.exit_code == 0, result.output
     assert EMPTY_TEXT_ERROR in result.output
@@ -264,13 +405,13 @@ def test_file_name_error_accepts_valid_names(name) -> None:
 
 
 def test_unknown_topic_asks_for_a_new_one(orchestrator, summary) -> None:
-    orchestrator.fetch_article.side_effect = [ResourceNotFoundError("missing"), ARTICLE]
+    orchestrator.search_articles.side_effect = [ResourceNotFoundError("missing"), RESULTS]
 
-    result = run_cli(["--tema", "zzzxxyy", "--idioma", "inglés"], "Python\nN\n")
+    result = run_cli(["--tema", "zzzxxyy", "--idioma", "inglés"], "Python\nY\nN\n")
 
     assert result.exit_code == 0, result.output
     assert "No he encontrado nada sobre 'zzzxxyy' en Wikipedia" in result.output
-    calls = [call.args for call in orchestrator.fetch_article.call_args_list]
+    calls = [call.args for call in orchestrator.search_articles.call_args_list]
     assert calls == [("zzzxxyy",), ("Python",)]
     summary.assert_called_once_with("Python", "inglés", cli.NOT_EXPORTED, cli.NO_FILE)
 
@@ -283,7 +424,7 @@ def test_unknown_topic_asks_for_a_new_one(orchestrator, summary) -> None:
     ],
 )
 def test_provider_errors_exit_with_code_1(orchestrator, summary, error, message) -> None:
-    orchestrator.fetch_article.side_effect = error
+    orchestrator.search_articles.side_effect = error
 
     result = run_cli(OPTIONS)
 
@@ -294,7 +435,7 @@ def test_provider_errors_exit_with_code_1(orchestrator, summary, error, message)
 
 
 def test_unexpected_error_shows_a_message_instead_of_crashing(orchestrator, summary) -> None:
-    orchestrator.fetch_article.side_effect = ZeroDivisionError("division by zero")
+    orchestrator.search_articles.side_effect = ZeroDivisionError("division by zero")
 
     result = run_cli(OPTIONS)
 
@@ -307,7 +448,7 @@ def test_unexpected_error_shows_a_message_instead_of_crashing(orchestrator, summ
 
 @pytest.mark.parametrize("cancel", [KeyboardInterrupt(), EOFError()])
 def test_cancelling_shows_a_message_instead_of_crashing(orchestrator, summary, cancel) -> None:
-    orchestrator.fetch_article.side_effect = cancel
+    orchestrator.search_articles.side_effect = cancel
 
     result = run_cli(OPTIONS)
 
@@ -322,7 +463,7 @@ def test_closing_the_input_while_asking_shows_a_message(orchestrator, summary) -
 
     assert result.exit_code == 1
     assert "Has cancelado la investigación" in result.output
-    orchestrator.fetch_article.assert_not_called()
+    orchestrator.search_articles.assert_not_called()
 
 
 def test_network_failure_with_real_adapters_exits_with_code_1() -> None:
@@ -346,12 +487,12 @@ def test_slow_wikipedia_with_real_adapters_exits_with_code_1() -> None:
 
 def test_full_flow_with_real_adapters_searches_spanish_wikipedia(summary) -> None:
     responses = [
-        make_response(json_data={"query": {"search": [{"title": "Python"}]}}),
+        make_response(json_data=SEARCH_PAYLOAD),
         make_response(text='<div id="mw-content-text"><p>Un lenguaje.</p></div>'),
     ]
 
     with patch(GET, side_effect=responses) as mock_get:
-        result = run_cli(OPTIONS, "N\n")
+        result = run_cli(OPTIONS, "Y\nN\n")
 
     assert result.exit_code == 0, result.output
     assert "Un lenguaje." in result.output
@@ -374,7 +515,7 @@ def test_full_flow_creates_a_real_file_with_simulated_data(
     monkeypatch.setattr(cli, "EXPORT_FOLDER", str(tmp_path))
 
     with patch("cli.build_orchestrator", return_value=orchestrator):
-        result = run_cli(OPTIONS, f"Y\n{answer}\napuntes\n")
+        result = run_cli(OPTIONS, f"Y\nY\n{answer}\napuntes\n")
 
     assert result.exit_code == 0, result.output
     text = read_document(tmp_path / file_name)
@@ -385,7 +526,7 @@ def test_full_flow_creates_a_real_file_with_simulated_data(
 
 
 def test_enriched_text_is_shown_and_exported(orchestrator, summary) -> None:
-    result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+    result = run_cli(OPTIONS, "Y\nY\nT\napuntes\n")
 
     assert result.exit_code == 0, result.output
     assert "Texto enriquecido con IA" in result.output
@@ -405,7 +546,7 @@ def test_enriched_text_is_shown_and_exported(orchestrator, summary) -> None:
 def test_ai_failure_shows_a_message_and_keeps_going(orchestrator, summary, error, message) -> None:
     orchestrator.enrich_article.side_effect = error
 
-    result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+    result = run_cli(OPTIONS, "Y\nY\nT\napuntes\n")
 
     assert result.exit_code == 0, result.output
     assert message in result.output
@@ -418,13 +559,13 @@ def test_ai_failure_shows_a_message_and_keeps_going(orchestrator, summary, error
 def test_real_adapters_without_token_still_export_the_original(tmp_path, monkeypatch, summary) -> None:
     """Without DEEPSEEK_API_KEY the app warns about the AI and still saves the file."""
     responses = [
-        make_response(json_data={"query": {"search": [{"title": "Python"}]}}),
+        make_response(json_data=SEARCH_PAYLOAD),
         make_response(text='<div id="mw-content-text"><p>Un lenguaje.</p></div>'),
     ]
     monkeypatch.setattr(cli, "EXPORT_FOLDER", str(tmp_path))
 
     with patch(GET, side_effect=responses):
-        result = run_cli(OPTIONS, "Y\nT\napuntes\n")
+        result = run_cli(OPTIONS, "Y\nY\nT\napuntes\n")
 
     assert result.exit_code == 0, result.output
     assert "No he podido enriquecer el texto con IA" in result.output

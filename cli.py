@@ -5,11 +5,12 @@ from typing import Callable, Optional
 
 import pyfiglet
 import typer
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt
 from rich.table import Table
+from rich.text import Text
 
 from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
 from wiki_enrichment.bootstrap import build_orchestrator
@@ -18,7 +19,12 @@ from wiki_enrichment.domain.exceptions import (
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.domain.models import ArticleContent, BriefSummary, EnrichedContent
+from wiki_enrichment.domain.models import (
+    ArticleContent,
+    BriefSummary,
+    EnrichedContent,
+    SearchResult,
+)
 
 WIKIPEDIA_LANGUAGE = "es"
 BANNER_FONT = "larry3d"
@@ -31,6 +37,10 @@ EXPORT_QUESTION = "¿Quieres exportar la investigación? (Y/N)"
 FORMAT_QUESTION = "¿PDF (P) o TXT (T)?"
 SUMMARY_FORMAT_QUESTION = "¿Resumen en PDF (P) o TXT (T)?"
 FILE_NAME_QUESTION = "¿Con qué nombre quieres guardar el archivo?"
+CONFIRM_QUESTION = "¿Era esto lo que buscabas? (Y/N)"
+CHOOSE_QUESTION = "¿Cuál de estos buscabas? Escribe su número"
+RETYPE_OPTION = "Volver a escribir el tema"
+NO_DESCRIPTION = "(Wikipedia no cuenta con una descripción de este artículo)"
 EMPTY_ANSWER_ERROR = "No has escrito nada. Inténtalo de nuevo."
 MAX_TOPIC_LENGTH = 300  # Longest search that Wikipedia accepts.
 
@@ -197,20 +207,128 @@ def run_steps(steps: list[Step]) -> list[object]:
     return results
 
 
+def one_line(text: str) -> str:
+    """Join the lines of a text so it can be cut to a single line on screen."""
+    return " ".join(text.split())
+
+
+def show_first_result(result: SearchResult) -> None:
+    """Show the first result with Wikipedia's summary, or a note if it has none."""
+    print()
+    console.print(Panel(
+        result.summary or NO_DESCRIPTION,
+        title=f"Primer resultado: {result.title}",
+        border_style="cyan",
+    ))
+
+
+def show_options(results: list[SearchResult]) -> None:
+    """Show the other results numbered, plus a last option to write the topic again.
+
+    Each summary is cut to one line so the whole list fits on the screen.
+    """
+    lines = []
+    for number, result in enumerate(results, start=1):
+        lines.append(Text.assemble((f"{number}. ", "bold cyan"), (result.title, "green")))
+        description = one_line(result.summary) or NO_DESCRIPTION
+        lines.append(Text(f"   {description}", style="dim", no_wrap=True, overflow="ellipsis"))
+    lines.append(Text.assemble((f"{len(results) + 1}. ", "bold cyan"), RETYPE_OPTION))
+    print()
+    console.print(Panel(Group(*lines), title="Otros resultados", border_style="cyan"))
+
+
+def ask_choice(results: list[SearchResult]) -> Optional[SearchResult]:
+    """Return the result the user picks, or None if they want to write the topic again."""
+    show_options(results)
+    options = [str(number) for number in range(1, len(results) + 2)]
+    index = int(ask_option(CHOOSE_QUESTION, options)) - 1
+    return results[index] if index < len(results) else None
+
+
+def prefetch_article(
+    orchestrator: WikiEnrichmentOrchestrator, title: str
+) -> Optional[ArticleContent]:
+    """Download the first result before asking, so a "yes" needs no second download.
+
+    If it fails, nothing is lost and it does not count as a failure: the
+    article is downloaded later, only if the user confirms it.
+    """
+    try:
+        return orchestrator.fetch_article_by_title(title)
+    except WikiEnrichmentError:
+        return None
+
+
+def search_topic(
+    orchestrator: WikiEnrichmentOrchestrator, topic: str
+) -> tuple[list[SearchResult], Optional[ArticleContent]]:
+    """Search the topic and download its first result in advance."""
+    print()
+    [results] = run_steps([
+        (f"Buscando '{topic}' en Wikipedia...", lambda: orchestrator.search_articles(topic)),
+    ])
+    [first_article] = run_steps([
+        (f"Preparando '{results[0].title}'...", lambda: prefetch_article(orchestrator, results[0].title)),
+    ])
+    return results, first_article
+
+
+def download_article(
+    orchestrator: WikiEnrichmentOrchestrator, title: str
+) -> Optional[ArticleContent]:
+    """Download the article the user chose, or return None if it cannot be opened."""
+    try:
+        print()
+        [article] = run_steps([
+            (f"Descargando '{title}'...", lambda: orchestrator.fetch_article_by_title(title)),
+        ])
+        return article
+    except ResourceNotFoundError:
+        print()
+        show_error(f"No he podido abrir el artículo '{title}'. Elige otro resultado.")
+        return None
+
+
+def choose_article(
+    orchestrator: WikiEnrichmentOrchestrator,
+    results: list[SearchResult],
+    first_article: Optional[ArticleContent],
+) -> Optional[ArticleContent]:
+    """Return the article the user confirms or picks, or None to write the topic again.
+
+    The results and the article downloaded in advance only live inside this
+    function: when it returns, Python frees whatever was not chosen.
+    """
+    first = results[0]
+    show_first_result(first)
+    if ask_option(CONFIRM_QUESTION, [YES, NO]) == YES:
+        article = first_article or download_article(orchestrator, first.title)
+        if article is not None:
+            return article
+    first_article = None  # Not wanted (or not available): forget it right away.
+    others = results[1:]
+    while True:
+        choice = ask_choice(others)
+        if choice is None:
+            return None
+        article = download_article(orchestrator, choice.title)
+        if article is not None:
+            return article
+
+
 def research_topic(
     orchestrator: WikiEnrichmentOrchestrator, topic: str
 ) -> tuple[ArticleContent, str]:
+    """Search until the user confirms a result. Nothing is enriched before that."""
     while True:
         try:
-            print()
-            [article] = run_steps([
-                (f"Buscando '{topic}' en Wikipedia...", lambda: orchestrator.fetch_article(topic)),
-            ])
-            return article, topic
+            results, first_article = search_topic(orchestrator, topic)
+            article = choose_article(orchestrator, results, first_article)
+            if article is not None:
+                return article, topic
         except ResourceNotFoundError:
             print()
             show_error(f"No he encontrado nada sobre '{topic}' en Wikipedia. Prueba con otro tema.")
-            topic = ask_text(TOPIC_QUESTION, topic_error)
         except ProviderTimeoutError:
             print()
             show_error(WIKIPEDIA_TIMEOUT_ERROR)
@@ -219,6 +337,7 @@ def research_topic(
             print()
             show_error("No he podido conectar con Wikipedia. Revisa tu conexión a internet e inténtalo más tarde.")
             raise typer.Exit(code=1)
+        topic = ask_text(TOPIC_QUESTION, topic_error)
 
 
 def file_name_error(name: str) -> Optional[str]:

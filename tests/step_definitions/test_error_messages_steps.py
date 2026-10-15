@@ -26,6 +26,7 @@ from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
 REQUESTS_GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
 DEEPSEEK_POST = "wiki_enrichment.infrastructure.deepseek_enricher.requests.post"
 LANGUAGE = "inglés"
+CONFIRM = "Y\n"  # Answer to "¿Era esto lo que buscabas?"
 NO_EXPORT = "N\n"
 TECHNICAL_WORDS = [
     "Traceback", "Exception", "Error:", "timed out", "Max retries", "division by zero",
@@ -62,7 +63,7 @@ def context():
     return {
         "wikipedia": FakeWikipediaSource(),
         "enricher": FakeContentEnricher(),
-        "user_input": NO_EXPORT,
+        "user_input": CONFIRM + NO_EXPORT,
     }
 
 
@@ -112,14 +113,14 @@ def run_app(context, options: list[str], user_input: str) -> None:
 def unexpected_error(context) -> None:
     """Simulate a bug that nobody expected."""
     context["wikipedia"] = MagicMock()
-    context["wikipedia"].fetch_article.side_effect = ZeroDivisionError("division by zero")
+    context["wikipedia"].search.side_effect = ZeroDivisionError("division by zero")
 
 
 @given("the user presses Ctrl+C while searching")
 def user_cancels(context) -> None:
     """Simulate the user stopping the app in the middle of the search."""
     context["wikipedia"] = MagicMock()
-    context["wikipedia"].fetch_article.side_effect = KeyboardInterrupt()
+    context["wikipedia"].search.side_effect = KeyboardInterrupt()
 
 
 @given("the AI returns a broken answer")
@@ -140,13 +141,13 @@ def research(context, topic: str) -> None:
 @when(parsers.re(r'I type the topic "(?P<topic>.*)" and then "(?P<valid_topic>.+)"'))
 def type_topic(context, topic: str, valid_topic: str) -> None:
     """Type a wrong topic, then a valid one when the app asks again."""
-    run_app(context, [], f"{expand(topic)}\n{valid_topic}\n{LANGUAGE}\n{NO_EXPORT}")
+    run_app(context, [], f"{expand(topic)}\n{valid_topic}\n{LANGUAGE}\n{CONFIRM}{NO_EXPORT}")
 
 
 @when(parsers.re(r'I type the language "(?P<language>.*)" and then "(?P<valid_language>.+)"'))
 def type_language(context, language: str, valid_language: str) -> None:
     """Type a wrong language, then a valid one when the app asks again."""
-    run_app(context, [], f"{VALID_TOPIC}\n{language}\n{valid_language}\n{NO_EXPORT}")
+    run_app(context, [], f"{VALID_TOPIC}\n{language}\n{valid_language}\n{CONFIRM}{NO_EXPORT}")
 
 
 @then(parsers.parse('I see the message "{message}"'))
