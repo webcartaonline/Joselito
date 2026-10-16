@@ -1,0 +1,1231 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flujo de Joselito</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Arquitectura y flujo de Joselito (Content Enricher), paso a paso y animado.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<style>
+/* Concepto: la propia terminal de Joselito. Fondo de consola, recuadros como los
+   paneles de Rich y los mismos colores que usa el programa para cada paso. */
+:root {
+  --bg: #0b1214;
+  --panel: #0f191c;
+  --raise: #142226;
+  --line: #213338;
+  --fg: #d4e0dd;
+  --dim: #7b918d;
+  --faint: #45585a;
+  --cyan: #56d4dc;
+  --green: #84d98f;
+  --magenta: #d690ef;
+  --yellow: #f0cb63;
+  --blue: #74a9ff;
+  --red: #ff7272;
+  --white: #eef4f2;
+  --mono: "JetBrains Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --r: 6px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans); }
+.wrap {
+  max-width: 1220px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 72px;
+}
+code, .mono { font-family: var(--mono); }
+code { font-size: .86em; color: var(--white); background: var(--raise); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.c-cyan { color: var(--cyan); } .c-green { color: var(--green); } .c-magenta { color: var(--magenta); }
+.c-yellow { color: var(--yellow); } .c-blue { color: var(--blue); } .c-red { color: var(--red); }
+.c-dim { color: var(--dim); } .c-fg { color: var(--fg); } .c-white { color: var(--white); }
+
+/* ---------- cabecera ---------- */
+.top { display: grid; gap: 10px; margin-bottom: 26px; }
+.prompt { font-family: var(--mono); font-size: 13px; color: var(--dim); overflow-wrap: anywhere; }
+.prompt b { color: var(--fg); font-weight: 400; }
+.banners { overflow-x: auto; }
+.banner { margin: 0; font-family: var(--mono); font-weight: 700; color: var(--cyan); line-height: 1.12; white-space: pre; }
+.banner.sm { font-size: clamp(5px, 1.35vw, 9px); opacity: .75; }
+body.in-scene .banners, body.in-scene .lede { display: none; }
+.banner.lg { font-size: clamp(6px, 1.85vw, 17px); text-shadow: 0 0 18px color-mix(in srgb, var(--cyan) 35%, transparent); }
+.banner .ln { display: block; animation: rowin .5s both; }
+@keyframes rowin { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+h1 { font: 600 clamp(26px, 3.4vw, 38px)/1.15 var(--sans); margin: 6px 0 0; text-wrap: balance; color: var(--white); letter-spacing: -.01em; }
+.lede { margin: 0; max-width: 68ch; color: var(--fg); }
+.meta { font-size: 12px; color: var(--dim); display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.meta span::before { content: "● "; color: var(--faint); }
+
+/* ---------- pestañas ---------- */
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 4px 9px; margin-right: 14px; cursor: pointer; font-family: var(--mono); font-size: 13px; color: var(--dim); }
+.tab b { color: var(--yellow); font-weight: 600; }
+.tab[aria-selected="true"] { color: var(--white); border-bottom-color: var(--cyan); }
+.tab:hover { color: var(--fg); }
+
+/* ---------- vista general ---------- */
+.ov { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 400px); gap: 28px; align-items: start; }
+@media (max-width: 900px) { .ov { grid-template-columns: minmax(0, 1fr); } .explain { position: static !important; order: -1; } }
+.ov-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel); border-radius: var(--r); padding: 7px 12px; cursor: pointer; font-family: var(--mono); font-size: 13px; color: var(--fg); }
+.btn:hover { border-color: var(--dim); }
+.btn.primary { border-color: color-mix(in srgb, var(--cyan) 60%, var(--line)); color: var(--cyan); }
+.btn[disabled] { opacity: .4; cursor: default; }
+.hint { font-size: 13px; color: var(--dim); }
+
+.rail { position: relative; list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rail::before { content: ""; position: absolute; left: 23px; top: 26px; bottom: 26px; width: 2px;
+  background: repeating-linear-gradient(to bottom, var(--faint) 0 6px, transparent 6px 12px); background-size: 2px 12px; animation: flow 1.2s linear infinite; }
+@keyframes flow { to { background-position: 0 12px; } }
+.node { position: relative; width: 100%; display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 14px; align-items: center; text-align: left;
+  background: transparent; border: 1px solid transparent; border-radius: var(--r); padding: 9px 12px 9px 0; cursor: pointer; transition: background .3s, border-color .3s; }
+.node:hover { background: var(--panel); border-color: var(--line); }
+.node .num { justify-self: center; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); border: 1.5px solid var(--faint);
+  font: 600 12px var(--mono); color: var(--dim); position: relative; z-index: 1; transition: all .35s; }
+.node .txt { min-width: 0; display: grid; gap: 2px; }
+.node .ttl { font-weight: 600; color: var(--fg); }
+.node .sub { font-size: 13.5px; color: var(--dim); }
+.node .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }
+.tag { font: 11px/1.5 var(--mono); padding: 0 6px; border-radius: 3px; border: 1px solid var(--line); color: var(--dim); }
+.tag.opt { border-style: dashed; }
+.tag.warn { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--line)); }
+.node .go { font: 12px var(--mono); color: var(--dim); opacity: 0; transition: opacity .2s; white-space: nowrap; }
+.node:hover .go, .node.on .go { opacity: 1; }
+.node.on { background: color-mix(in srgb, var(--c) 7%, var(--panel)); border-color: color-mix(in srgb, var(--c) 35%, var(--line)); }
+.node.on .num { border-color: var(--c); color: var(--bg); background: var(--c); box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 18%, transparent); }
+.node.on .ttl { color: var(--white); }
+.node.on .go { color: var(--c); }
+.node.done .num { border-color: color-mix(in srgb, var(--c) 70%, var(--faint)); color: var(--c); }
+.packet { position: absolute; left: 0; top: 0; width: 46px; height: 46px; border-radius: 50%; border: 2px solid var(--pc, var(--cyan)); z-index: 2; pointer-events: none;
+  box-shadow: 0 0 16px 2px color-mix(in srgb, var(--pc, var(--cyan)) 45%, transparent); transition: top .8s cubic-bezier(.6,0,.3,1), left .8s, border-color .5s; opacity: 0; animation: ring 1.8s ease-in-out infinite; }
+@keyframes ring { 50% { transform: scale(1.12); box-shadow: 0 0 26px 4px color-mix(in srgb, var(--pc, var(--cyan)) 30%, transparent); } }
+.rail-wrap { position: relative; min-width: 0; }
+
+.explain { position: sticky; top: 16px; border: 1px solid color-mix(in srgb, var(--ec, var(--cyan)) 45%, var(--line)); border-radius: var(--r); background: var(--panel); padding: 22px 20px 18px; display: grid; gap: 12px; transition: border-color .5s; }
+.explain .ptitle { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: var(--bg); padding: 0 8px; font: 12px var(--mono); color: var(--ec, var(--cyan)); white-space: nowrap; }
+.ex-body { display: grid; gap: 12px; transition: opacity .3s, transform .3s; }
+.ex-body.out { opacity: 0; transform: translateY(6px); }
+.explain h2 { margin: 0; font: 600 22px/1.25 var(--sans); color: var(--white); text-wrap: balance; }
+.explain p { margin: 0; }
+.lbl { display: inline-block; font: 600 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); margin-right: 6px; }
+.lbl.red { color: var(--red); }
+.example { border-left: 2px solid var(--ec, var(--cyan)); padding: 2px 0 2px 12px; color: var(--fg); }
+.io { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 13.5px; }
+.io dt { font: 600 11px/2 var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+.io dd { margin: 0; font-family: var(--mono); font-size: 13px; color: var(--white); overflow-wrap: anywhere; line-height: 1.9; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 11px/1.7 var(--mono); padding: 0 7px; border-radius: 3px; color: var(--k); border: 1px solid color-mix(in srgb, var(--k) 45%, transparent); }
+.timer { height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.timer i { display: block; height: 100%; width: 0; background: var(--ec, var(--cyan)); }
+.legend { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--dim); align-items: center; }
+
+/* ---------- escena ---------- */
+.sc-top { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.sc-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.sc-head { display: grid; gap: 8px; margin-bottom: 16px; }
+.sc-head .eyebrow { font: 12px var(--mono); color: var(--sc, var(--cyan)); }
+.sc-head h2 { margin: 0; font: 600 clamp(22px, 2.8vw, 30px)/1.2 var(--sans); color: var(--white); text-wrap: balance; }
+.sc-head p { margin: 0; max-width: 72ch; }
+.modes { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; margin-bottom: 14px; flex-wrap: wrap; }
+.mode { background: none; border: 0; padding: 7px 14px; cursor: pointer; font: 13px var(--mono); color: var(--dim); }
+.mode[aria-checked="true"] { background: var(--raise); color: var(--white); }
+.mode.alt[aria-checked="true"] { color: var(--red); }
+.sc-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+@media (max-width: 960px) { .sc-grid { grid-template-columns: minmax(0, 1fr); } }
+.card { position: relative; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); min-width: 0; }
+.card > .ptitle { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); background: var(--bg); padding: 0 8px; font: 11.5px var(--mono); color: var(--dim); white-space: nowrap; }
+.stage-x { overflow-x: auto; padding: 18px 10px 10px; }
+.stage { min-width: 560px; }
+.lanes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 4px; }
+.lane { text-align: center; border: 1px solid color-mix(in srgb, var(--k) 45%, var(--line)); border-radius: 5px; padding: 5px 4px; background: var(--bg); transition: opacity .3s, box-shadow .3s; }
+.lane b { display: block; font: 600 11.5px/1.3 var(--mono); color: var(--k); overflow-wrap: anywhere; }
+.lane span { display: block; font: 10.5px/1.3 var(--mono); color: var(--dim); overflow-wrap: anywhere; }
+.lane.off { opacity: .28; }
+.lane.hot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--k) 25%, transparent); }
+.seq-scroll { max-height: 400px; overflow-y: auto; scroll-behavior: smooth; }
+#seq { display: block; width: 100%; height: auto; }
+#seq text { font-family: var(--mono); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+#seq .lb { font-size: 11px; font-weight: 600; text-anchor: middle; }
+#seq .pt { font-size: 9.5px; text-anchor: middle; fill: var(--dim); }
+#seq .idx { font-size: 10px; fill: var(--faint); }
+#seq .row { transition: opacity .4s; }
+#seq .row.past { opacity: .42; }
+#seq .row.cur .lb, #seq .row.cur .hd, #seq .row.cur .pt { transition: opacity .3s .35s; }
+#seq .row.cur.drawing .lb, #seq .row.cur.drawing .hd, #seq .row.cur.drawing .pt { opacity: 0; }
+#seq .nt rect { stroke-width: 1.2; }
+#seq .nt text { font-size: 10.5px; text-anchor: middle; }
+
+.term-card { display: flex; flex-direction: column; min-height: 420px; }
+.term-bar { display: flex; justify-content: space-between; gap: 8px; font: 11px var(--mono); color: var(--dim); padding: 14px 14px 6px; flex-wrap: wrap; }
+.term { flex: 1; font: 12.5px/1.5 var(--mono); padding: 4px 14px 14px; overflow: auto; max-height: 460px; scroll-behavior: smooth; }
+.term > * { margin-bottom: 8px; }
+.term .new { animation: termin .45s both; }
+@keyframes termin { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.t-rule { border-top: 1px solid var(--faint); margin-top: 6px; }
+.t-q { color: var(--yellow); font-weight: 700; white-space: pre-wrap; }
+.t-q .ar { color: var(--dim); font-weight: 400; }
+.t-q .ans { color: var(--white); font-weight: 400; }
+.t-q .caret { display: inline-block; width: .55em; height: 1.05em; vertical-align: -2px; background: var(--fg); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.t-pnl { position: relative; border: 1px solid var(--k); border-radius: 4px; padding: 10px 10px 8px; margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); }
+.t-pnl > .tt { position: absolute; top: -.75em; left: 50%; transform: translateX(-50%); background: var(--panel); padding: 0 5px; color: var(--k); white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
+.t-pnl.err > .tt { color: var(--red); }
+.t-prog { display: grid; grid-template-columns: 1.2em minmax(0, auto) minmax(40px, 1fr) 3.4em; gap: 8px; align-items: center; }
+.t-prog .sp { color: var(--green); }
+.t-prog .ds { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-prog .bar { height: 4px; background: var(--faint); border-radius: 2px; overflow: hidden; }
+.t-prog .bar i { display: block; height: 100%; width: 100%; background: var(--magenta); }
+.t-prog.full .bar i { background: var(--green); }
+.t-prog .pc { text-align: right; color: var(--magenta); font-variant-numeric: tabular-nums; }
+.t-ban { margin: 0; color: var(--cyan); font-weight: 700; font-size: 9.5px; line-height: 1.12; white-space: pre; overflow-x: auto; }
+.t-txt { white-space: pre-wrap; overflow-wrap: anywhere; }
+.t-tab { border-collapse: collapse; font: inherit; margin: 4px 0; }
+.t-tab caption { font-style: italic; color: var(--fg); padding-bottom: 2px; }
+.t-tab th, .t-tab td { border: 1px solid var(--faint); padding: 1px 10px; text-align: left; }
+.t-tab th { font-weight: 700; }
+.t-tab td:first-child { color: var(--cyan); } .t-tab td:last-child { color: var(--green); }
+.t-sim { color: var(--faint); }
+
+.caption { margin-top: 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); padding: 16px 18px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; min-height: 104px; }
+.caption .fn { font: 700 13px var(--mono); color: var(--bg); background: var(--sc, var(--cyan)); border-radius: 4px; padding: 2px 7px; align-self: start; font-variant-numeric: tabular-nums; }
+.caption .fn.err { background: var(--red); }
+.caption .cap { margin: 0; font-size: 16.5px; line-height: 1.5; color: var(--white); }
+.caption .tec { margin: 0; grid-column: 2; font-size: 13.5px; color: var(--dim); }
+.caption .ref { display: inline-block; font: 12px var(--mono); color: var(--sc, var(--cyan)); margin-right: 8px; }
+.caption .anim { animation: termin .35s both; }
+
+.player { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.dots { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 0; }
+.dot { width: 22px; height: 6px; border-radius: 3px; border: 0; background: var(--line); cursor: pointer; padding: 0; transition: background .3s; }
+.dot.past { background: color-mix(in srgb, var(--sc, var(--cyan)) 45%, var(--line)); }
+.dot.cur { background: var(--sc, var(--cyan)); }
+.dot.err.past, .dot.err.cur { background: var(--red); }
+.counter { font: 12px var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+.refs { margin-top: 18px; display: grid; gap: 6px; font-size: 13.5px; }
+.refs ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.refs li code { color: var(--fg); }
+.endnext { margin-top: 14px; display: none; }
+.endnext.show { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; animation: termin .4s both; }
+
+/* ---------- capas ---------- */
+.ly { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 24px; align-items: start; }
+@media (max-width: 960px) { .ly { grid-template-columns: minmax(0, 1fr); } }
+.ly-tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
+.hex-x { overflow-x: auto; }
+#hex { display: block; width: 100%; min-width: 560px; height: auto; }
+#hex text { font-family: var(--mono); }
+#hex .hit { cursor: pointer; }
+#hex .hit:hover .box, #hex .hit.sel .box { stroke-width: 2.2; }
+#hex .hit.sel .box { filter: drop-shadow(0 0 6px var(--glow, transparent)); }
+#hex .ad .l1, #hex .ad .l2 { transition: opacity .25s; }
+#hex .ad.flip .l1, #hex .ad.flip .l2 { opacity: 0; }
+.info { position: sticky; top: 16px; border: 1px solid color-mix(in srgb, var(--ic, var(--green)) 45%, var(--line)); border-radius: var(--r); background: var(--panel); padding: 22px 20px 18px; display: grid; gap: 12px; }
+.info .ptitle { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: var(--bg); padding: 0 8px; font: 12px var(--mono); color: var(--ic, var(--green)); white-space: nowrap; }
+.info h3 { margin: 0; font: 600 20px/1.25 var(--sans); color: var(--white); }
+.info p { margin: 0; }
+.info ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.info .file { font: 12px var(--mono); color: var(--dim); overflow-wrap: anywhere; }
+.info pre { margin: 0; font: 12px/1.5 var(--mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; overflow-x: auto; }
+.info .rule { border-left: 2px solid var(--ic, var(--green)); padding-left: 12px; }
+.switch { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.switch button { background: none; border: 0; padding: 7px 14px; cursor: pointer; font: 13px var(--mono); color: var(--dim); }
+.switch button[aria-pressed="true"] { background: var(--raise); color: var(--white); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="prompt">PS D:\Clase\manu\WikiCoders\Repositorio&gt; <b>python cli.py</b></div>
+    <div class="banners" aria-hidden="true">
+      <pre class="banner sm" id="bHola"></pre>
+      <pre class="banner lg" id="bJoselito"></pre>
+    </div>
+    <h1>Arquitectura y flujo</h1>
+    <p class="lede">Cómo funciona Joselito por dentro: qué pasa desde que escribes un tema hasta que se guarda el PDF, y cómo están separadas sus piezas. Haz clic en cualquier paso para ver su animación explicada.</p>
+    <div class="meta"><span>rama fix/merge-solver</span><span>commit 590a4f9</span><span>revisado el 16/10/2026</span></div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Vistas">
+    <button class="tab" role="tab" id="tab-flujo" aria-controls="vista-flujo" aria-selected="true"><b>1</b> Flujo de una ejecución</button>
+    <button class="tab" role="tab" id="tab-capas" aria-controls="vista-capas" aria-selected="false"><b>2</b> Capas y enchufes</button>
+  </nav>
+
+  <!-- ===== Vista 1: flujo ===== -->
+  <section id="vista-flujo" role="tabpanel" aria-labelledby="tab-flujo">
+    <div class="ov">
+      <div>
+        <div class="ov-tools">
+          <button class="btn primary" id="tourBtn" type="button">⏸ Pausar recorrido</button>
+          <span class="hint">Clic en un paso para entrar en su animación.</span>
+        </div>
+        <div class="rail-wrap">
+          <ol class="rail" id="rail"></ol>
+          <div class="packet" id="packet"></div>
+        </div>
+      </div>
+      <aside class="explain" id="explain" aria-live="polite">
+        <span class="ptitle" id="exTitle">Paso 1 de 11</span>
+        <div class="ex-body" id="exBody"></div>
+        <div class="timer" aria-hidden="true"><i id="exTimer"></i></div>
+      </aside>
+    </div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <!-- ===== Escena de un paso ===== -->
+  <section id="escena" hidden>
+    <div class="sc-top">
+      <button class="btn" id="scBack" type="button">← Volver al flujo</button>
+      <div class="sc-nav">
+        <button class="btn" id="scPrevStep" type="button">◂ Paso anterior</button>
+        <button class="btn" id="scNextStep" type="button">Paso siguiente ▸</button>
+      </div>
+    </div>
+    <div class="sc-head">
+      <span class="eyebrow" id="scEyebrow"></span>
+      <h2 id="scTitle"></h2>
+      <p id="scIntro"></p>
+    </div>
+    <div class="modes" role="radiogroup" aria-label="Camino" id="modes"></div>
+    <div class="sc-grid">
+      <div class="card">
+        <span class="ptitle">quién habla con quién</span>
+        <div class="stage-x"><div class="stage">
+          <div class="lanes" id="lanes"></div>
+          <div class="seq-scroll" id="seqScroll"><svg id="seq" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagrama de secuencia del paso"></svg></div>
+        </div></div>
+      </div>
+      <div class="card term-card">
+        <span class="ptitle">lo que ves en la terminal</span>
+        <div class="term-bar"><span>simulación con un ejemplo</span><span id="termTopic">tema «Agujero negro» · idioma «inglés»</span></div>
+        <div class="term" id="term"></div>
+      </div>
+    </div>
+    <div class="caption" id="caption" aria-live="polite"></div>
+    <div class="player">
+      <button class="btn" id="fPrev" type="button" aria-label="Momento anterior">◀</button>
+      <button class="btn primary" id="fPlay" type="button">⏸ Pausar</button>
+      <button class="btn" id="fNext" type="button" aria-label="Momento siguiente">▶</button>
+      <button class="btn" id="fRestart" type="button">↺ Desde el principio</button>
+      <div class="dots" id="dots"></div>
+      <span class="counter" id="counter"></span>
+    </div>
+    <div class="endnext" id="endNext"><span class="hint" id="endText">Fin de este paso.</span><button class="btn primary" id="endBtn" type="button">Paso siguiente ▸</button></div>
+    <div class="refs"><span class="lbl">Dónde está en el código</span><ul id="refs"></ul></div>
+    <p class="hint" style="margin-top:14px">Teclado: ← → para avanzar o retroceder, espacio para pausar, Esc para volver.</p>
+  </section>
+
+  <!-- ===== Vista 2: capas ===== -->
+  <section id="vista-capas" role="tabpanel" aria-labelledby="tab-capas" hidden>
+    <div class="ly" id="lyRoot">
+      <div>
+        <div class="ly-tools">
+          <div class="switch" role="group" aria-label="Qué se enchufa">
+            <button type="button" id="swProd" aria-pressed="true">Programa real</button>
+            <button type="button" id="swTest" aria-pressed="false">Tests</button>
+          </div>
+          <span class="hint">Las flechas apuntan hacia dentro: lo de fuera conoce lo de dentro, nunca al revés. Clic en cualquier pieza.</span>
+        </div>
+        <div class="hex-x"><svg id="hex" viewBox="0 0 800 570" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagrama de capas hexagonal"></svg></div>
+      </div>
+      <aside class="info" id="info" aria-live="polite"></aside>
+    </div>
+  </section>
+</div>
+
+<script>
+const BANNERS = {"HOLA": " __  __          ___\n/\\ \\/\\ \\        /\\_ \\\n\\ \\ \\_\\ \\    ___\\//\\ \\      __              ____    ___   __  __\n \\ \\  _  \\  / __`\\\\ \\ \\   /'__`\\           /',__\\  / __`\\/\\ \\/\\ \\\n  \\ \\ \\ \\ \\/\\ \\L\\ \\\\_\\ \\_/\\ \\L\\.\\_  __    /\\__, `\\/\\ \\L\\ \\ \\ \\_\\ \\\n   \\ \\_\\ \\_\\ \\____//\\____\\ \\__/.\\_\\/\\ \\   \\/\\____/\\ \\____/\\/`____ \\\n    \\/_/\\/_/\\/___/ \\/____/\\/__/\\/_/\\ \\/    \\/___/  \\/___/  `/___/> \\\n                                    \\/                        /\\___/\n                                                              \\/__/", "JOSELITO": " _____                          ___        __\n/\\___ \\                        /\\_ \\    __/\\ \\__\n\\/__/\\ \\    ___     ____     __\\//\\ \\  /\\_\\ \\ ,_\\   ___\n   _\\ \\ \\  / __`\\  /',__\\  /'__`\\\\ \\ \\ \\/\\ \\ \\ \\/  / __`\\\n  /\\ \\_\\ \\/\\ \\L\\ \\/\\__, `\\/\\  __/ \\_\\ \\_\\ \\ \\ \\ \\_/\\ \\L\\ \\\n  \\ \\____/\\ \\____/\\/\\____/\\ \\____\\/\\____\\\\ \\_\\ \\__\\ \\____/\n   \\/___/  \\/___/  \\/___/  \\/____/\\/____/ \\/_/\\/__/\\/___/", "PLACER": " __  __                               __\n/\\ \\/\\ \\                       __    /\\ \\\n\\ \\ \\_\\ \\     __          ____/\\_\\   \\_\\ \\    ___       __  __    ___\n \\ \\  _  \\  /'__`\\       /',__\\/\\ \\  /'_` \\  / __`\\    /\\ \\/\\ \\ /' _ `\\\n  \\ \\ \\ \\ \\/\\ \\L\\.\\_    /\\__, `\\ \\ \\/\\ \\L\\ \\/\\ \\L\\ \\   \\ \\ \\_\\ \\/\\ \\/\\ \\\n   \\ \\_\\ \\_\\ \\__/.\\_\\   \\/\\____/\\ \\_\\ \\___,_\\ \\____/    \\ \\____/\\ \\_\\ \\_\\\n    \\/_/\\/_/\\/__/\\/_/    \\/___/  \\/_/\\/__,_ /\\/___/      \\/___/  \\/_/\\/_/\n\n\n       ___\n      /\\_ \\\n _____\\//\\ \\      __      ___     __   _ __\n/\\ '__`\\\\ \\ \\   /'__`\\   /'___\\ /'__`\\/\\`'__\\\n\\ \\ \\L\\ \\\\_\\ \\_/\\ \\L\\.\\_/\\ \\__//\\  __/\\ \\ \\/\n \\ \\ ,__//\\____\\ \\__/.\\_\\ \\____\\ \\____\\\\ \\_\\\n  \\ \\ \\/ \\/____/\\/__/\\/_/\\/____/\\/____/ \\/_/\n   \\ \\_\\\n    \\/_/"};
+
+/* ============================================================
+   Datos: textos reales del programa (cli.py) y pasos del flujo
+   ============================================================ */
+const MSG = {
+  TOPIC_Q: "¿Qué tema quieres investigar?",
+  LANG_Q: "¿A qué idioma quieres traducirlo?",
+  SUMMARY_Q: "¿Quieres un resumen breve? (Y/N)",
+  EXPORT_Q: "¿Quieres exportar la investigación? (Y/N)",
+  FORMAT_Q: "¿PDF (P) o TXT (T)?",
+  SUMMARY_FORMAT_Q: "¿Resumen en PDF (P) o TXT (T)?",
+  FILE_Q: "¿Con qué nombre quieres guardar el archivo?",
+  CONFIRM_Q: "¿Era esto lo que buscabas? (Y/N)",
+  CHOOSE_Q: "¿Cuál de estos buscabas? Escribe su número",
+  RETRY_Q: "¿Quieres reintentar? (Y/N)",
+  EMPTY: "No has escrito nada. Inténtalo de nuevo.",
+  CANCELLED: "Has cancelado la investigación. Puedes volver a empezar cuando quieras.",
+  UNEXPECTED: "Ha ocurrido un error inesperado y no he podido continuar. Inténtalo de nuevo y, si se repite, avisa al equipo.",
+  RETRYING: "Wikipedia está tardando demasiado. Lo intento otra vez...",
+  SLOW_TOPIC: "Wikipedia sigue tardando demasiado con 'Agujero negro'. Prueba a escribir el tema de otra manera, por ejemplo con menos palabras o sin faltas de ortografía.",
+  SLOW_OTHER: "Wikipedia sigue tardando demasiado con 'Agujero negro primordial'. Elige otro resultado.",
+  TIMEOUT: "Wikipedia no está respondiendo a tiempo. Seguramente tiene problemas ahora mismo. Vuelve a abrir el programa dentro de unos minutos.",
+  CONNECTION: "No he podido conectar con Wikipedia (intento 1 de 3). Revisa tu conexión a internet.",
+  RATE: "Wikipedia ha recibido demasiadas peticiones y hay que esperar antes de volver a intentarlo (intento 1 de 3).",
+  COUNTDOWN: "Podrás reintentar en 60 segundos...",
+  PATIENCE: "Paciencia, si no Wikipedia bloqueará esta IP",
+  ENRICH: "No he podido enriquecer el texto con IA. Revisa que tienes DEEPSEEK_API_KEY en el archivo .env, que tu cuenta de DeepSeek tiene saldo y que hay conexión a internet. El documento se guardará sin el texto enriquecido.",
+  ENRICH_TIMEOUT: "La IA está tardando demasiado en responder. Inténtalo de nuevo más tarde. El documento se guardará sin el texto enriquecido.",
+  SUMMARY_ERR: "No he podido generar el resumen breve. Revisa que tienes DEEPSEEK_API_KEY en el archivo .env y que hay conexión a internet. El documento se guardará sin resumen.",
+};
+const EX = {
+  first: "Un agujero negro es una región finita del espacio en cuyo interior existe una concentración de masa lo suficientemente elevada como para generar un campo gravitatorio tal que ninguna partícula material, ni siquiera la luz, puede escapar de ella. …",
+  article: "Un agujero negro es una región finita del espacio en cuyo interior existe una concentración de masa lo suficientemente elevada…\n\n(… hasta 5 párrafos de Wikipedia …)",
+  enriched: "Un agujero negro es una zona del espacio con tanta masa concentrada que su gravedad no deja escapar nada, ni siquiera la luz. …\n\n(… texto de la IA, unos 1.900 caracteres …)",
+  english: "A black hole is a finite region of space in which there is a concentration of mass high enough to generate a gravitational field such that no material particle, not even light, can escape from it. …",
+  brief: "Un agujero negro es una región del espacio cuya gravedad impide escapar incluso a la luz. … (3 o 4 frases)",
+  others: [["Agujero negro supermasivo"], ["Agujero negro estelar"], ["Agujero negro primordial"], ["Agujero negro de Schwarzschild"], ["Agujero blanco"]],
+  path: "D:\\Clase\\manu\\WikiCoders\\Repositorio\\output\\agujeros_negros.pdf",
+};
+
+const C = { cyan: "var(--cyan)", green: "var(--green)", magenta: "var(--magenta)", yellow: "var(--yellow)", blue: "var(--blue)", red: "var(--red)", fg: "var(--white)", dim: "var(--dim)" };
+const LAYER = {
+  P: ["Presentación", C.yellow], K: ["Composición", C.fg], A: ["Aplicación", C.cyan],
+  D: ["Dominio", C.green], I: ["Infraestructura", C.magenta], X: ["Exterior", C.blue],
+};
+const lane = (name, sub, color, off) => ({ name, sub, color, off: !!off });
+const L_USER = lane("Usuario", "tú, en la terminal", C.fg);
+const L_CLI = lane("CLI", "cli.py", C.yellow);
+const L_ORQ = lane("Orquestador", "application/", C.cyan);
+const L_ORQ_OFF = lane("Orquestador", "no interviene", C.cyan, true);
+const L_LOG = lane("logging_config", "infrastructure/", C.magenta);
+const L_LOGS = lane("Disco", "logs/", C.blue);
+
+/* Ayudantes para describir cada momento de una escena */
+const M = (f, t, label, o = {}) => ({ type: "msg", f, t, label, ...o });
+const R = (f, t, label, o = {}) => ({ type: "msg", f, t, label, ret: true, ...o });
+const N = (at, label, o = {}) => ({ type: "note", at, label, ...o });
+const T = {
+  q: (text) => ({ k: "q", text }),
+  a: (text) => ({ k: "a", text }),
+  p: (text) => ({ k: "p", text }),
+  pnl: (color, title, body) => ({ k: "pnl", color, title, body }),
+  err: (body) => ({ k: "pnl", color: C.red, title: "Error", body, err: true }),
+  txt: (text, cls, bold) => ({ k: "txt", text, cls, bold }),
+  ban: (key) => ({ k: "ban", key }),
+  table: (rows) => ({ k: "table", rows }),
+};
+const OTHERS_BODY = EX.others.map((r, i) => `${i + 1}. ${r[0]}\n   (resumen de una línea…)`).join("\n") + "\n6. Volver a escribir el tema";
+
+const STEPS = [
+  {
+    key: "arranque", color: C.cyan, title: "Arranque", sub: "Se crea el log de esta ejecución y aparece el saludo.",
+    layers: ["P", "I"], input: "python cli.py  [--tema] [--idioma]", output: "run_id de 8 caracteres",
+    plain: "Al abrir el programa se le da un código único a esta ejecución y se prepara su diario (el log), un archivo donde se apunta todo lo que va pasando. Después aparece el saludo con letras grandes.",
+    example: "Código 7828eef5 → todo se apunta en logs/app_7828eef5.log.",
+    fail: "Si pulsas Ctrl+C en cualquier momento, Joselito se despide con un aviso y termina. Si pasa algo inesperado, guarda el detalle en el log y te enseña un mensaje sencillo.",
+    refs: ["cli.py · main()", "infrastructure/logging_config.py · configure_logging()", "logging_config.py · generate_run_id()"],
+    lanes: [L_USER, L_CLI, L_ORQ_OFF, L_LOG, L_LOGS],
+    frames: [
+      M(0, 1, "python cli.py", { cap: "Abres el programa desde la terminal.", tec: "Typer llama a `main(tema, idioma)`. Las opciones `--tema` y `--idioma` son opcionales.", ref: "cli.py · main()" }),
+      N(1, "generate_run_id()", { cap: "Inventa un código corto para reconocer esta ejecución entre todas las demás.", tec: "`uuid4().hex[:8]`, por ejemplo `7828eef5`.", ref: "logging_config.py · generate_run_id()" }),
+      M(1, 3, "configure_logging(run_id)", { cap: "Pide que se prepare el diario de esta ejecución.", tec: "Nivel según la variable `LOG_LEVEL` (por defecto `INFO`). Quita los manejadores anteriores para no repetir líneas.", ref: "logging_config.py · configure_logging()" }),
+      M(3, 4, "crea app_7828eef5.log", { cap: "Cada ejecución escribe en su propio archivo dentro de la carpeta logs.", tec: "`RotatingFileHandler`: 1 MB por archivo y hasta 5 copias, hora en UTC. Formato: `fecha | nivel | run_id | módulo | mensaje`.", ref: "logging_config.py · build_file_handler()" }),
+      M(1, 3, "Application started", { cap: "Apunta la primera línea: el programa ha arrancado.", tec: "Línea real de un log del proyecto: `2026-10-16 09:42:23 | INFO | 7828eef5 | wiki_enrichment.cli | Application started`.", ref: "cli.py · main()" }),
+      M(1, 0, "cartel de bienvenida", { cap: "Te saluda con letras grandes dibujadas con símbolos.", tec: "`pyfiglet` con la fuente `larry3d`, en cian y negrita: «Hola, soy» y «Joselito».", ref: "cli.py · show_banner()", term: [T.ban("HOLA"), T.ban("JOSELITO")] }),
+    ],
+    alt: {
+      label: "Si algo falla", intro: "Qué pasa si cancelas o si ocurre un error que nadie esperaba.",
+      frames: [
+        M(0, 1, "Ctrl+C", { err: true, cap: "Cancelas con Ctrl+C (o se cierra la entrada de texto).", tec: "`main()` captura `KeyboardInterrupt` y `EOFError`.", ref: "cli.py · main()" }),
+        M(1, 3, "Application cancelled", { cap: "Lo apunta en el log.", tec: "`Application cancelled by the user`" }),
+        M(1, 0, "aviso y salida", { err: true, cap: "Te avisa y termina con código de salida 1.", term: [T.err(MSG.CANCELLED)] }),
+        N(1, "error inesperado", { err: true, cap: "Si salta un error que no estaba previsto, tampoco se ve un error feo de Python.", tec: "`except Exception` → `logger.critical(\"Unexpected error\", exc_info=True)` guarda el detalle técnico solo en el log." }),
+        M(1, 0, "mensaje sencillo", { err: true, cap: "A ti solo te enseña un mensaje claro.", term: [T.err(MSG.UNEXPECTED)] }),
+      ],
+    },
+  },
+  {
+    key: "preguntas", color: C.yellow, title: "Preguntas: tema e idioma", sub: "Comprueba que las respuestas tienen sentido.",
+    layers: ["P"], input: "lo que escribes", output: "tema: str · idioma: str",
+    plain: "Joselito te pregunta qué quieres investigar y a qué idioma traducirlo. Antes de seguir comprueba cada respuesta, y si algo no vale te lo explica y vuelve a preguntar.",
+    example: "Tema «Agujero negro», idioma «inglés».",
+    fail: "Una respuesta vacía, un tema de más de 300 caracteres o un idioma con números se rechazan con un aviso en rojo.",
+    refs: ["cli.py · ask_topic()", "cli.py · ask_text()", "cli.py · topic_error()", "cli.py · language_error()"],
+    lanes: [L_USER, L_CLI, L_ORQ_OFF, L_LOG, L_LOGS],
+    frames: [
+      M(1, 0, "pregunta el tema", { cap: "Aparece la primera pregunta, en amarillo.", tec: "`prompt_user()` dibuja una línea gris, luego `# pregunta` y debajo `»` para responder.", ref: "cli.py · prompt_user()", term: [T.q(MSG.TOPIC_Q)] }),
+      M(0, 1, "«Agujero negro»", { cap: "Escribes el tema.", tec: "Se quitan los espacios del principio y del final.", term: [T.a("Agujero negro")] }),
+      N(1, "topic_error()", { cap: "Comprueba que no está vacío y que no pasa de 300 caracteres, lo máximo que acepta Wikipedia.", tec: "`MAX_TOPIC_LENGTH = 300`", ref: "cli.py · topic_error()" }),
+      M(1, 3, "Topic selected", { cap: "Apunta el tema en el log.", tec: "`logger.info(\"Topic selected: %s\", topic)`" }),
+      M(1, 0, "pregunta el idioma", { cap: "Segunda pregunta.", term: [T.q(MSG.LANG_Q)] }),
+      M(0, 1, "«inglés»", { cap: "Escribes el idioma con su nombre, no con un código.", term: [T.a("inglés")] }),
+      N(1, "language_error()", { cap: "Solo deja letras y espacios: «inglés» vale, «1nglés» no.", tec: "`char.isalpha() or char.isspace()` para cada carácter.", ref: "cli.py · language_error()" }),
+      M(1, 3, "Target language selected", { cap: "También apunta el idioma.", tec: "Con `--tema` y `--idioma` no hay preguntas, pero `ask_text()` comprueba las respuestas igual." }),
+    ],
+    alt: {
+      label: "Si algo falla", intro: "Respuestas que no valen y cómo reacciona Joselito.",
+      frames: [
+        M(1, 0, "pregunta el tema", { term: [T.q(MSG.TOPIC_Q)], cap: "Te pregunta el tema." }),
+        M(0, 1, "(vacío)", { err: true, cap: "Pulsas Enter sin escribir nada.", term: [T.a("")] }),
+        M(1, 0, "aviso y repite", { err: true, cap: "Te avisa en un recuadro rojo y vuelve a preguntar. No avanza hasta que la respuesta vale.", tec: "`ask_text()` repite en bucle mientras la validación devuelva un motivo de error.", ref: "cli.py · ask_text()", term: [T.err(MSG.EMPTY), T.q(MSG.TOPIC_Q)] }),
+        M(0, 1, "«Agujero negro»", { cap: "Ahora sí escribes el tema.", term: [T.a("Agujero negro")] }),
+        M(1, 0, "pregunta el idioma", { cap: "Pasa al idioma.", term: [T.q(MSG.LANG_Q)] }),
+        M(0, 1, "«1nglés»", { err: true, cap: "Escribes un número por error.", term: [T.a("1nglés")] }),
+        M(1, 0, "aviso y repite", { err: true, cap: "Te dice exactamente qué está mal y te da un ejemplo.", term: [T.err("'1nglés' no es un idioma válido. Escribe solo letras, por ejemplo: inglés."), T.q(MSG.LANG_Q)] }),
+      ],
+    },
+  },
+  {
+    key: "montaje", color: C.fg, title: "Montaje de las piezas", sub: "bootstrap.py enchufa un adaptador en cada puerto.",
+    layers: ["K", "I"], input: "variables del archivo .env", output: "WikiEnrichmentOrchestrator listo",
+    plain: "Es como montar un equipo de música: el orquestador tiene enchufes (los puertos) y aquí se conecta un aparato concreto en cada uno. bootstrap.py es el único archivo que sabe qué marcas se usan: Wikipedia, DeepSeek, Google… Ocurre justo después de las preguntas.",
+    example: "En el enchufe «traductor» se conecta el adaptador de Google. Se podría conectar otro traductor sin tocar el orquestador.",
+    fail: "Si falta DEEPSEEK_API_KEY no se detiene: conecta un «suplente» que avisará del problema cuando haga falta la IA (paso 7).",
+    refs: ["src/bootstrap.py · build_orchestrator()", "bootstrap.py · build_content_enricher()", "bootstrap.py · build_content_summarizer()", "infrastructure/ai.py"],
+    lanes: [L_CLI, lane("bootstrap.py", "composición", C.fg), L_ORQ, lane("Adaptadores", "infrastructure/", C.magenta), lane("Entorno", ".env", C.blue)],
+    frames: [
+      M(0, 1, "build_orchestrator('es')", { cap: "Con tus respuestas ya listas, el CLI pide el orquestador montado.", tec: "Wikipedia en español siempre: `WIKIPEDIA_LANGUAGE = \"es\"`.", ref: "cli.py · run_app()" }),
+      M(1, 4, "lee .env", { cap: "Carga las claves secretas del archivo .env. Si una variable ya existe en el sistema, se respeta y no se pisa.", tec: "`load_dotenv()` al importar y `_load_local_env_file()` en la raíz del proyecto (UTF-8, ignora comentarios).", ref: "bootstrap.py · _load_local_env_file()" }),
+      M(1, 3, "WikipediaSourceAdapter", { cap: "Crea el adaptador de Wikipedia en español.", tec: "URL base `https://es.wikipedia.org`.", ref: "bootstrap.py · build_orchestrator()" }),
+      M(1, 3, "build_content_enricher()", { cap: "Si hay clave de DeepSeek, crea el enriquecedor de verdad.", tec: "Modelo: `DEEPSEEK_MODEL` o `deepseek-chat`. Dirección: `DEEPSEEK_BASE_URL` o `https://api.deepseek.com/v1`.", ref: "bootstrap.py · build_content_enricher()" }),
+      M(1, 3, "TranslationAdapter()", { cap: "Crea el traductor de Google. Su clave no se mira ahora, sino en el momento de traducir.", tec: "`GOOGLE_TRANSLATE_API_KEY` se lee dentro de `translate()`." }),
+      M(1, 3, "DocumentExporterAdapter()", { cap: "Crea la pieza que guarda los archivos TXT y PDF." }),
+      M(1, 3, "build_content_summarizer()", { cap: "Crea la pieza de los resúmenes breves, con la misma idea que el enriquecedor.", tec: "Modelo: `DEEPSEEK_SUMMARIZER_MODEL` → `DEEPSEEK_MODEL` → `deepseek-chat`.", ref: "bootstrap.py · build_content_summarizer()" }),
+      M(1, 2, "Orquestador(5 piezas)", { cap: "Entrega las 5 piezas al orquestador. Él solo conoce los enchufes, no las marcas.", tec: "Inyección de dependencias por el constructor: `wikipedia_source`, `content_enricher`, `translator`, `document_exporter`, `content_summarizer`." }),
+      R(2, 0, "orquestador listo", { cap: "El CLI ya puede trabajar. Desde aquí, todo lo pide a través del orquestador." }),
+    ],
+    alt: {
+      label: "Si falta la clave de IA", intro: "El programa arranca aunque no haya clave de DeepSeek.",
+      frames: [
+        M(1, 4, "lee .env", { cap: "En el .env no aparece DEEPSEEK_API_KEY." }),
+        M(1, 3, "DeepSeekEnricher()", { cap: "Intenta crear el enriquecedor de verdad." }),
+        R(3, 1, "EnrichmentError", { err: true, cap: "El adaptador se niega: sin clave no puede trabajar.", tec: "`\"DEEPSEEK_API_KEY is not set. Add it to your .env file.\"`", ref: "deepseek_enricher.py · __init__()" }),
+        M(1, 3, "AIContentEnricher(motivo)", { cap: "En su lugar enchufa un suplente que guarda el motivo.", tec: "Cumple el mismo puerto, pero `enrich()` siempre lanza `EnrichmentError(motivo)`.", ref: "infrastructure/ai.py" }),
+        M(1, 3, "AIContentSummarizer(motivo)", { cap: "Lo mismo con la pieza de resúmenes.", tec: "`summarize()` siempre lanza `SummarizationError(motivo)`." }),
+        M(1, 2, "Orquestador(5 piezas)", { cap: "El programa arranca igual. El aviso saldrá en el paso 7, cuando toque usar la IA." }),
+      ],
+    },
+  },
+  {
+    key: "busqueda", color: C.cyan, title: "Búsqueda en Wikipedia", sub: "Hasta 6 resultados, cada uno con su resumen.",
+    layers: ["P", "A", "I", "X"], input: "tema", output: "list[SearchResult] (máx. 6)",
+    plain: "Joselito busca el tema en Wikipedia y se trae una lista corta: título y dos frases de cada resultado. Mientras tanto, ya descarga el primero por si le dices que sí.",
+    example: "Si escribes «Alboles», Wikipedia sugiere «Árboles» y esos resultados aparecen primero.",
+    fail: "Si Wikipedia tarda, reintenta solo. Si no hay conexión, pregunta si reintentar (3 intentos como mucho). Si pide esperar, enseña una cuenta atrás.",
+    refs: ["cli.py · search_topic()", "cli.py · prefetch_article()", "wiki_enrichment_orchestrator.py · search_articles()", "infrastructure/wikipedia.py · search()"],
+    lanes: [L_USER, L_CLI, L_ORQ, lane("WikipediaSourceAdapter", "infrastructure/wikipedia.py", C.magenta), lane("Wikipedia", "es.wikipedia.org", C.blue)],
+    frames: [
+      M(1, 0, "barra de progreso", { cap: "Ves una barra con un indicador girando mientras espera.", tec: "`run_steps()` usa `rich.progress`: indicador, texto, barra y porcentaje.", ref: "cli.py · run_steps()", term: [T.p("Buscando 'Agujero negro' en Wikipedia...")] }),
+      M(1, 2, "search_articles(tema)", { cap: "El CLI le pide la búsqueda al orquestador.", ref: "wiki_enrichment_orchestrator.py · search_articles()" }),
+      M(2, 3, "search(tema)", { port: "WikipediaSource", cap: "El orquestador lo pide a través del enchufe WikipediaSource. No sabe que detrás está Wikipedia.", tec: "El puerto es un `typing.Protocol` definido en `domain/ports.py`." }),
+      M(3, 4, "GET /w/api.php", { cap: "Una sola petición trae hasta 6 resultados, sus 2 primeras frases y, si la hay, una sugerencia («¿Quisiste decir…?»).", tec: "`generator=search`, `gsrlimit=6`, `prop=extracts`, `exsentences=2`, `gsrinfo=suggestion`. Espera máxima 10 s. Se identifica con `User-Agent: WikiEnrichmentBot/1.0`.", ref: "wikipedia.py · _search_with_summaries()" }),
+      R(4, 3, "JSON", { cap: "Wikipedia responde con los datos." }),
+      N(3, "¿hay sugerencia?", { cap: "Si Wikipedia propone otra forma de escribirlo, busca también la sugerencia y pone esos resultados primero, sin repetir títulos.", tec: "Si esa segunda búsqueda falla, se quedan los resultados originales y no cuenta como fallo.", ref: "wikipedia.py · _add_suggested_results()" }),
+      R(3, 2, "list[SearchResult]", { cap: "Devuelve 6 resultados como mucho, solo con título y resumen, no el artículo entero. Así ocupa poca memoria.", tec: "`SearchResult(title, summary)` es un dataclass `frozen=True, slots=True`.", ref: "domain/models.py" }),
+      R(2, 1, "resultados", { cap: "Los resultados llegan al CLI.", tec: "Como todo fue bien, los contadores de fallos vuelven a 0: `failures.reset()`." }),
+      M(1, 2, "fetch_article_by_title(1º)", { cap: "Descarga ya el primer resultado, antes de preguntarte. Si dices que sí, no tendrás que esperar.", tec: "`prefetch_article()`: si falla, devuelve `None` y no cuenta como fallo.", ref: "cli.py · prefetch_article()", term: [T.p("Preparando 'Agujero negro'...")] }),
+      M(2, 3, "fetch_article_by_title", { port: "WikipediaSource", cap: "Otra vez a través del mismo enchufe." }),
+      M(3, 4, "GET /wiki/Agujero_negro", { cap: "Descarga la página del primer resultado. Cómo se recorta lo verás en el paso 6." }),
+    ],
+    alt: {
+      label: "Si Wikipedia falla", intro: "Los reintentos: Joselito cuenta por separado las respuestas lentas y los fallos de conexión, y ambos contadores vuelven a cero en cuanto algo funciona.",
+      frames: [
+        M(3, 4, "GET /w/api.php", { cap: "Pide la búsqueda." }),
+        R(4, 3, "10 s sin respuesta", { err: true, cap: "Wikipedia no contesta a tiempo.", tec: "`requests.Timeout` → `ProviderTimeoutError`.", ref: "wikipedia.py · domain_errors()" }),
+        R(3, 1, "ProviderTimeoutError", { err: true, cap: "El error sube hasta el CLI ya convertido en un error del propio programa, no de la librería de internet." }),
+        M(1, 0, "1ª vez: reintenta", { cap: "La primera vez lo vuelve a intentar solo.", tec: "`count_slow_answer()` devuelve 1, menor que `SLOW_ATTEMPTS_BEFORE_NEW_TOPIC` (2).", ref: "cli.py · search_topic()", term: [T.txt(MSG.RETRYING, "c-yellow")] }),
+        M(1, 0, "2ª vez: otro tema", { err: true, cap: "Si vuelve a tardar, te propone escribir el tema de otra forma.", term: [T.err(MSG.SLOW_TOPIC), T.q(MSG.TOPIC_Q)] }),
+        M(1, 0, "3ª vez: cierra", { err: true, cap: "A la tercera seguida, se cierra con un mensaje.", tec: "`MAX_SLOW_ATTEMPTS = 3` → `typer.Exit(code=1)`.", term: [T.err(MSG.TIMEOUT)] }),
+        R(4, 3, "HTTP 429", { err: true, cap: "Otro caso: Wikipedia contesta «demasiadas peticiones, espera».", tec: "`RateLimitError(retry_after_seconds=…)` con los segundos de la cabecera `Retry-After`.", ref: "wikipedia.py · check_status()" }),
+        M(1, 0, "cuenta atrás", { err: true, cap: "Enseña una cuenta atrás. Si pulsas teclas mientras, te pide paciencia; esas teclas no cuentan como respuesta.", tec: "Usa los segundos de `Retry-After`, o 60 si Wikipedia no los dice. Al terminar pregunta si reintentar.", ref: "cli.py · wait_with_countdown()", term: [T.err(MSG.RATE), T.txt(MSG.COUNTDOWN, "c-yellow"), T.txt(MSG.PATIENCE, "c-red"), T.q(MSG.RETRY_Q)] }),
+        N(1, "sin conexión: 3 intentos", { err: true, cap: "Si no hay internet, te pregunta si reintentar. Al tercer intento fallido, se cierra.", tec: "`MAX_CONNECTION_ATTEMPTS = 3`. Si respondes N, se despide sin reintentar.", ref: "cli.py · handle_connection_failure()", term: [T.err(MSG.CONNECTION), T.q(MSG.RETRY_Q)] }),
+        N(1, "nada encontrado", { err: true, cap: "Si no hay ningún resultado, te pide otro tema.", tec: "`ResourceNotFoundError`.", term: [T.err("No he encontrado nada sobre 'Xyzzq' en Wikipedia. Prueba con otro tema."), T.q(MSG.TOPIC_Q)] }),
+      ],
+    },
+  },
+  {
+    key: "confirmacion", color: C.cyan, title: "¿Era esto lo que buscabas?", sub: "Confirmas el primero o eliges otro de la lista.",
+    layers: ["P", "A", "I"], input: "list[SearchResult]", output: "el artículo elegido",
+    plain: "Antes de gastar IA, Joselito te enseña el primer resultado y te pregunta si es el bueno. Si no, te enseña los demás numerados para que elijas uno, o puedes volver a escribir el tema.",
+    example: "Respondes «N» y luego «3» para quedarte con el tercer resultado de la lista.",
+    fail: "No se enriquece nada hasta que confirmas. Si el artículo elegido no se puede abrir, te pide elegir otro.",
+    refs: ["cli.py · choose_article()", "cli.py · show_first_result()", "cli.py · ask_choice()", "tests/features/search_confirmation.feature"],
+    lanes: [L_USER, L_CLI, L_ORQ, lane("WikipediaSourceAdapter", "infrastructure/wikipedia.py", C.magenta), lane("Wikipedia", "es.wikipedia.org", C.blue)],
+    frames: [
+      M(1, 0, "primer resultado", { cap: "Te enseña el título y las dos frases de Wikipedia en un recuadro cian.", tec: "Si Wikipedia no tiene descripción: «(Wikipedia no cuenta con una descripción de este artículo)».", ref: "cli.py · show_first_result()", term: [T.pnl(C.cyan, "Primer resultado: Agujero negro", EX.first)] }),
+      M(1, 0, "¿Era esto…? (Y/N)", { cap: "Te pregunta si es lo que buscabas.", tec: "Acepta `Y`, `yes`, `si`, `sí`, `N` y `no`, en mayúsculas o minúsculas.", ref: "cli.py · _normalize_yes_no()", term: [T.q(MSG.CONFIRM_Q)] }),
+      M(0, 1, "«Y»", { cap: "Respondes que sí.", term: [T.a("Y")] }),
+      N(1, "ya estaba descargado", { cap: "Usa el artículo que bajó por adelantado en el paso 4. No se descarga dos veces, y hay un test que lo comprueba.", tec: "`article = first_article or download_article(...)`", ref: "cli.py · choose_article()" }),
+      N(1, "olvida el resto", { cap: "La lista de resultados solo existe dentro de esta parte del programa. Al salir, Python libera esa memoria.", tec: "Los resultados viven solo dentro de `choose_article()`." }),
+    ],
+    alt: {
+      label: "Si dices que no", intro: "Eliges otro resultado de la lista o vuelves a escribir el tema.",
+      frames: [
+        M(1, 0, "primer resultado", { cap: "Te enseña el primer resultado.", term: [T.pnl(C.cyan, "Primer resultado: Agujero negro", EX.first), T.q(MSG.CONFIRM_Q)] }),
+        M(0, 1, "«N»", { cap: "No era lo que buscabas.", term: [T.a("N")] }),
+        M(1, 0, "otros resultados", { cap: "Te enseña los demás numerados, cada uno con una línea de resumen, y una última opción para escribir el tema otra vez.", tec: "Los resúmenes se cortan a una línea para que la lista quepa en pantalla.", ref: "cli.py · show_options()", term: [T.pnl(C.cyan, "Otros resultados", OTHERS_BODY)] }),
+        M(1, 0, "¿Cuál…? (número)", { cap: "Te pide el número.", term: [T.q(MSG.CHOOSE_Q)] }),
+        M(0, 1, "«3»", { cap: "Eliges el 3.", tec: "Solo valen los números del 1 al 6.", term: [T.a("3")] }),
+        M(1, 2, "fetch_article_by_title()", { cap: "Ahora sí descarga el artículo elegido, y solo ese.", ref: "cli.py · download_article()", term: [T.p("Descargando 'Agujero negro primordial'...")] }),
+        M(2, 3, "fetch_article_by_title()", { port: "WikipediaSource", cap: "Por el mismo enchufe de siempre." }),
+        M(3, 4, "GET /wiki/…", { cap: "Pide la página a Wikipedia." }),
+        N(1, "opción 6", { cap: "Si eliges la última opción, vuelves a escribir el tema y empieza una búsqueda nueva.", tec: "`ask_choice()` devuelve `None` y `research_topic()` vuelve a preguntar el tema.", ref: "cli.py · research_topic()" }),
+      ],
+    },
+  },
+  {
+    key: "descarga", color: C.green, title: "Descarga del artículo", sub: "Se queda con el título y los 5 primeros párrafos.",
+    layers: ["P", "A", "D", "I", "X"], input: "título elegido", output: "ArticleContent(title, paragraphs)",
+    plain: "Se descarga la página de Wikipedia y se queda solo con lo importante: el título y los 5 primeros párrafos que tienen texto. Luego te los enseña en pantalla.",
+    example: "Una página con 40 párrafos se queda en 5.",
+    fail: "Si la página no existe (error 404) o no tiene texto, te pide elegir otro resultado. Si tarda dos veces seguidas, te devuelve a la lista.",
+    refs: ["infrastructure/wikipedia.py · fetch_article_by_title()", "wikipedia.py · _download_article()", "wikipedia.py · _extract_paragraphs()", "cli.py · show_article()"],
+    lanes: [L_USER, L_CLI, L_ORQ, lane("WikipediaSourceAdapter", "infrastructure/wikipedia.py", C.magenta), lane("Wikipedia", "es.wikipedia.org", C.blue)],
+    frames: [
+      N(1, "¿ya descargado?", { cap: "Si es el primer resultado y ya se bajó en el paso 4, esta descarga se salta. Si no, se hace ahora.", ref: "cli.py · choose_article()" }),
+      M(1, 2, "fetch_article_by_title", { cap: "El CLI pide el artículo al orquestador.", term: [T.p("Descargando 'Agujero negro'...")], ref: "cli.py · download_article()" }),
+      M(2, 3, "fetch_article_by_title", { port: "WikipediaSource", cap: "El orquestador lo pide por el enchufe.", ref: "wiki_enrichment_orchestrator.py · fetch_article_by_title()" }),
+      M(3, 4, "GET /wiki/Agujero_negro", { cap: "Pide la página web normal. Los espacios del título se cambian por guiones bajos.", tec: "`quote(title.replace(\" \", \"_\"), safe=\"()\")`. Espera máxima 10 s.", ref: "wikipedia.py · _download_article()" }),
+      R(4, 3, "HTML", { cap: "Recibe la página completa, con menús, tablas y todo lo demás." }),
+      N(3, "BeautifulSoup: 5 párrafos", { cap: "Busca la zona del texto principal, coge los párrafos que no están vacíos y se queda con los 5 primeros.", tec: "`div#mw-content-text` → `find_all(\"p\")` → los 5 primeros (`MAX_PARAGRAPHS = 5`).", ref: "wikipedia.py · _extract_paragraphs()" }),
+      R(3, 2, "ArticleContent", { cap: "Lo empaqueta en un objeto del dominio que no se puede modificar.", tec: "`ArticleContent(title, paragraphs)` con `frozen=True`. Su `full_text` une los párrafos con una línea en blanco.", ref: "domain/models.py" }),
+      R(2, 1, "artículo", { cap: "El orquestador apunta en el log cuántos párrafos tiene y se lo pasa al CLI.", tec: "`Chosen article ready: title=Agujero negro paragraphs=5`" }),
+      M(1, 0, "panel verde", { cap: "Te enseña el texto en un recuadro verde.", ref: "cli.py · show_article()", term: [T.pnl(C.green, "Resultados sobre Agujero negro", EX.article)] }),
+    ],
+    alt: {
+      label: "Si algo falla", intro: "Qué pasa si la página no existe o Wikipedia va lenta.",
+      frames: [
+        M(3, 4, "GET /wiki/…", { cap: "Pide la página elegida." }),
+        R(4, 3, "HTTP 404", { err: true, cap: "La página no existe.", tec: "→ `ResourceNotFoundError`.", ref: "wikipedia.py · _download_article()" }),
+        M(1, 0, "elige otro", { err: true, cap: "Te avisa y vuelves a la lista de resultados.", term: [T.err("No he podido abrir el artículo 'Agujero negro primordial'. Elige otro resultado.")], ref: "cli.py · download_article()" }),
+        N(3, "sin párrafos", { err: true, cap: "Pasa lo mismo si la página existe pero no tiene ningún párrafo con texto.", tec: "`No content found for '…'` → `ResourceNotFoundError`." }),
+        R(4, 3, "lenta 2 veces", { err: true, cap: "Si tarda dos veces seguidas y venías de la lista, te devuelve a ella para elegir otro.", tec: "Si era el primer resultado confirmado, en cambio pregunta: «Wikipedia sigue tardando. ¿Quieres reintentar la descarga? (Y/N)».", term: [T.err(MSG.SLOW_OTHER)] }),
+      ],
+    },
+  },
+  {
+    key: "ia", color: C.magenta, title: "Enriquecer con IA", sub: "DeepSeek explica el texto mejor, sin inventar.",
+    layers: ["P", "A", "I", "X"], input: "ArticleContent", output: "ai_summary: str (puede quedar vacío)",
+    plain: "El texto de Wikipedia se envía a la IA de DeepSeek con una instrucción clara: explicarlo mejor, en español y sin inventar datos. Lo que devuelve es el «texto enriquecido».",
+    example: "5 párrafos técnicos se convierten en una explicación más clara de unos 1.900 caracteres (en un log real: characters=1890).",
+    fail: "Si la IA falla o tarda, Joselito sigue sin texto enriquecido y guarda el detalle del error en output/ultimo_error_ia.txt.",
+    refs: ["cli.py · enrich_article()", "wiki_enrichment_orchestrator.py · enrich_article()", "infrastructure/deepseek_enricher.py · enrich()", "infrastructure/ai.py · AIContentEnricher"],
+    lanes: [L_USER, L_CLI, L_ORQ, lane("DeepSeekEnricher", "infrastructure/deepseek_enricher.py", C.magenta), lane("API DeepSeek", "api.deepseek.com", C.blue)],
+    frames: [
+      M(1, 0, "Enriqueciendo con IA...", { cap: "Ves la barra de progreso.", term: [T.p("Enriqueciendo con IA...")], ref: "cli.py · enrich_article()" }),
+      M(1, 2, "enrich_article(artículo)", { cap: "El CLI pide enriquecer el artículo.", ref: "wiki_enrichment_orchestrator.py · enrich_article()" }),
+      M(2, 3, "enrich(artículo)", { port: "ContentEnricher", cap: "El orquestador lo pide por el enchufe ContentEnricher." }),
+      N(3, "máx. 4000 caracteres", { cap: "Si el texto es muy largo, lo corta para que la IA cueste menos.", tec: "`MAX_ARTICLE_CHARS = 4000`, y añade «[Texto truncado para ahorrar coste de IA.]». Un texto vacío lanza `EnrichmentError`." }),
+      M(3, 4, "POST /chat/completions", { cap: "Envía el título y el texto con esta instrucción: «Responde siempre en español, sé fiel al contenido del artículo y no inventes datos».", tec: "Modelo `deepseek-chat`, `max_tokens=600`, espera máxima 60 s, cabecera `Authorization: Bearer <clave>`.", ref: "deepseek_enricher.py · enrich()" }),
+      R(4, 3, "texto enriquecido", { cap: "La IA contesta con el texto nuevo.", tec: "Se lee `choices[0].message.content`. Si llega vacío, es un error." }),
+      R(3, 2, "EnrichedContent", { cap: "Lo guarda junto al artículo original.", tec: "`EnrichedContent(original_article, ai_summary)`; la traducción todavía está vacía.", ref: "domain/models.py" }),
+      R(2, 1, "ai_summary", { cap: "El CLI se queda con el texto de la IA.", tec: "Log: `AI enrichment ready: title=… characters=1890`." }),
+      M(1, 0, "panel magenta", { cap: "Te lo enseña en un recuadro magenta.", ref: "cli.py · show_enriched()", term: [T.pnl(C.magenta, "Texto enriquecido con IA", EX.enriched)] }),
+    ],
+    alt: {
+      label: "Si la IA falla", intro: "Un fallo de la IA no detiene a Joselito: sigue sin texto enriquecido.",
+      frames: [
+        M(3, 4, "POST /chat/completions", { cap: "Pide el texto a DeepSeek." }),
+        R(4, 3, "más de 60 s", { err: true, cap: "La IA tarda demasiado.", tec: "→ `ProviderTimeoutError`." }),
+        M(1, 0, "aviso", { err: true, cap: "Te avisa y sigue adelante.", term: [T.err(MSG.ENRICH_TIMEOUT)] }),
+        N(3, "el suplente sin clave", { err: true, cap: "Si en el paso 3 faltaba la clave, aquí actúa el suplente: lanza el error con el motivo guardado.", tec: "`AIContentEnricher.enrich()` → `EnrichmentError(\"DEEPSEEK_API_KEY is not set. Add it to your .env file.\")`", ref: "infrastructure/ai.py" }),
+        N(1, "ultimo_error_ia.txt", { cap: "Guarda el detalle en output/ultimo_error_ia.txt, para que no se pierda entre tanto texto.", ref: "cli.py · log_ai_error()" }),
+        M(1, 0, "aviso con detalle", { err: true, cap: "Te enseña el motivo y dónde lo ha guardado.", term: [T.err(MSG.ENRICH + "\n\nDetalle: DEEPSEEK_API_KEY is not set. Add it to your .env file.\n\nHe guardado el detalle en D:\\Clase\\manu\\WikiCoders\\Repositorio\\output\\ultimo_error_ia.txt")] }),
+        N(1, "sigue sin IA", { cap: "Joselito continúa con el texto enriquecido vacío. Por eso, más adelante, no te ofrece el resumen breve.", tec: "`enrich_article()` del CLI devuelve `\"\"`." }),
+      ],
+    },
+  },
+  {
+    key: "traduccion", color: C.green, title: "Traducción", sub: "Google Translate traduce el artículo de Wikipedia.",
+    layers: ["P", "A", "I", "X"], input: "ArticleContent + idioma", output: "EnrichedContent (original + IA + traducción)", tags: [["si falla, termina", "warn"]],
+    plain: "Se traduce el artículo original de Wikipedia (sus 5 párrafos) al idioma que elegiste, con Google Translate. Después el CLI junta las tres versiones (original, IA y traducción) en un solo paquete.",
+    example: "«inglés» se convierte en el código «en» antes de enviarlo.",
+    fail: "Aquí un fallo sí detiene el programa: si no se puede traducir, te explica el motivo y termina.",
+    refs: ["cli.py · translate_article()", "wiki_enrichment_orchestrator.py · translate_article()", "infrastructure/translation.py · TranslationAdapter", "cli.py · build_content()"],
+    lanes: [L_USER, L_CLI, L_ORQ, lane("TranslationAdapter", "infrastructure/translation.py", C.magenta), lane("Google Translate", "translation.googleapis.com", C.blue)],
+    frames: [
+      M(1, 0, "Traduciendo…", { cap: "Ves la barra de progreso.", term: [T.p("Traduciendo a inglés con Google Translate...")], ref: "cli.py · translate_article()" }),
+      M(1, 2, "translate_article(…)", { cap: "Pide traducir el artículo original, no el texto de la IA.", tec: "`translate_article()` envía `article.full_text`.", ref: "wiki_enrichment_orchestrator.py · translate_article()" }),
+      M(2, 3, "translate(texto, idioma)", { port: "Translator", cap: "El orquestador lo pide por el enchufe Translator." }),
+      N(3, "'inglés' → 'en'", { cap: "Cambia el nombre del idioma por su código.", tec: "Lista fija: alemán `de`, catalán `ca`, español `es`, francés `fr`, inglés `en`, italiano `it`, japonés `ja`, portugués `pt` (con o sin tilde). Cualquier otro nombre se envía tal cual.", ref: "translation.py · LANGUAGE_CODES" }),
+      N(3, "trozos de 5000", { cap: "Si el texto es largo, lo parte en trozos: primero por saltos de línea, luego por frases y luego por espacios. Al juntarlos queda exactamente igual.", tec: "`MAX_CHARS_PER_REQUEST = 5000`", ref: "translation.py · _chunk_text()" }),
+      M(3, 4, "POST /language/translate/v2", { cap: "Envía cada trozo a Google. La clave va en una cabecera, nunca en la dirección web.", tec: "Cabecera `x-goog-api-key`; `source=\"es\"`, `format=\"text\"`. Espera máxima: 5 s para conectar y 30 s para responder.", ref: "translation.py · _request_translation()" }),
+      R(4, 3, "translatedText", { cap: "Google devuelve el texto traducido." }),
+      R(3, 2, "texto traducido", { cap: "El adaptador une los trozos traducidos." }),
+      R(2, 1, "texto traducido", { cap: "Llega al CLI." }),
+      M(1, 0, "panel verde", { cap: "Te enseña la traducción.", term: [T.pnl(C.green, "Traducción al inglés", EX.english)] }),
+      N(1, "build_content()", { cap: "El CLI junta el original, el texto de la IA y la traducción en un único paquete, listo para guardar.", tec: "`EnrichedContent(original_article, ai_summary, translated_summary)`", ref: "cli.py · build_content()" }),
+    ],
+    alt: {
+      label: "Si la traducción falla", intro: "A diferencia de la IA, un fallo al traducir cierra el programa.",
+      frames: [
+        N(3, "sin clave", { err: true, cap: "Si no hay clave de Google, ni lo intenta.", tec: "`\"Google Translate is not configured. Set the GOOGLE_TRANSLATE_API_KEY environment variable.\"`" }),
+        M(3, 4, "POST …/v2", { cap: "Con clave, envía la petición." }),
+        R(4, 3, "HTTP 429 / 5xx", { err: true, cap: "Si Google está saturado o falla por dentro, espera un poco y reintenta, hasta 2 veces.", tec: "Espera lo que diga `Retry-After`, o 1 s y luego 2 s (10 s como mucho).", ref: "translation.py · _retry_delay()" }),
+        R(4, 3, "HTTP 403", { err: true, cap: "Los demás errores no se reintentan: se explica qué pasa.", tec: "403 → «permission denied: check the API key, its restrictions, and that the Cloud Translation API is enabled». La clave se borra del mensaje (`[REDACTED]`).", ref: "translation.py · _http_error()" }),
+        R(3, 1, "WikiEnrichmentError", { err: true, cap: "El error llega al CLI." }),
+        M(1, 0, "aviso y salida", { err: true, cap: "Te enseña el motivo y el programa termina (código 1). No se llega a exportar.", tec: "Si Google tarda demasiado: «Google Translate ha tardado demasiado. Inténtalo de nuevo más tarde.»", term: [T.err("No he podido traducir el contenido con Google Translate: Google Translate returned HTTP 403 (permission denied: check the API key, …)")] }),
+      ],
+    },
+  },
+  {
+    key: "resumen", color: C.blue, title: "Resumen breve", sub: "Opcional: 3 o 4 frases hechas por la IA.",
+    layers: ["P", "A", "I", "X"], input: "EnrichedContent", output: "BriefSummary o nada", tags: [["opcional", "opt"]],
+    plain: "Si la IA funcionó en el paso 7, Joselito te ofrece un resumen muy corto del texto enriquecido. Si dices que sí, DeepSeek lo escribe en 3 o 4 frases.",
+    example: "De unos 1.900 caracteres a un párrafo corto para repasar.",
+    fail: "Si falla, te avisa y sigue sin resumen. Ojo: ahora mismo el resumen no se traduce.",
+    refs: ["cli.py · BriefSummaryFlow", "wiki_enrichment_orchestrator.py · summarize()", "infrastructure/deepseek_summarizer.py · summarize()"],
+    lanes: [L_USER, L_CLI, L_ORQ, lane("DeepSeekSummarizer", "infrastructure/deepseek_summarizer.py", C.magenta), lane("API DeepSeek", "api.deepseek.com", C.blue)],
+    frames: [
+      N(1, "¿hay texto de IA?", { cap: "Solo se ofrece si el paso 7 dio texto. Si no, se salta este paso.", tec: "Log: `No enriched text available; the brief summary is not offered`.", ref: "cli.py · run_app()" }),
+      M(1, 0, "¿Resumen breve? (Y/N)", { cap: "Te pregunta si lo quieres.", term: [T.q(MSG.SUMMARY_Q)], ref: "cli.py · BriefSummaryFlow.request()" }),
+      M(0, 1, "«Y»", { cap: "Dices que sí.", term: [T.a("Y")] }),
+      M(1, 2, "summarize(contenido, idioma)", { cap: "El CLI pide el resumen al orquestador.", term: [T.p("Resumiendo...")] }),
+      M(2, 3, "summarize(ai_summary)", { port: "ContentSummarizer", cap: "Se resume el texto enriquecido por la IA, no el original.", ref: "wiki_enrichment_orchestrator.py · summarize()" }),
+      M(3, 4, "POST /chat/completions", { cap: "Pide un resumen de «tres o cuatro frases», en español y sin inventar.", tec: "`max_tokens=200`, espera máxima 60 s.", ref: "deepseek_summarizer.py · summarize()" }),
+      R(4, 3, "resumen", { cap: "La IA devuelve el resumen." }),
+      R(3, 2, "texto", { cap: "El adaptador devuelve solo el texto." }),
+      R(2, 1, "BriefSummary", { cap: "Vuelve empaquetado con el título. El idioma llega al orquestador, pero no se usa: el resumen no se traduce.", tec: "`translated_text` queda vacío, así que en el archivo el apartado «Resumen traducido» sale como «(No disponible)»." }),
+      M(1, 0, "panel azul", { cap: "Te lo enseña en un recuadro azul.", term: [T.pnl(C.blue, "Resumen breve de Agujero negro", EX.brief)] }),
+    ],
+    alt: {
+      label: "Si dices que no o falla", intro: "Sin resumen, Joselito sigue igual hasta exportar.",
+      frames: [
+        M(1, 0, "¿Resumen breve? (Y/N)", { cap: "Te pregunta.", term: [T.q(MSG.SUMMARY_Q)] }),
+        M(0, 1, "«N»", { cap: "Si dices que no, se apunta en el log y se sigue.", tec: "`Brief summary declined by the user`", term: [T.a("N")] }),
+        R(4, 3, "error", { err: true, cap: "Si dijiste que sí y la IA falla…" }),
+        N(1, "ultimo_error_ia.txt", { cap: "…guarda el detalle en el mismo archivo que en el paso 7.", ref: "cli.py · log_ai_error()" }),
+        M(1, 0, "aviso", { err: true, cap: "Te avisa y continúa sin resumen.", term: [T.err(MSG.SUMMARY_ERR + "\n\nDetalle: …")] }),
+      ],
+    },
+  },
+  {
+    key: "exportar", color: C.yellow, title: "Exportar a TXT o PDF", sub: "Eliges formato y nombre del archivo.",
+    layers: ["P", "A", "I", "X"], input: "EnrichedContent (+ BriefSummary)", output: "archivos en output/", tags: [["opcional", "opt"]],
+    plain: "Si quieres guardar la investigación, eliges PDF o TXT y le pones nombre. Se guarda en la carpeta output con tres apartados: original, enriquecido y traducido. El resumen breve, si lo hay, va en otro archivo al lado.",
+    example: "agujeros_negros.pdf y agujeros_negros_summary.txt",
+    fail: "Si el nombre no vale, te dice por qué y vuelve a preguntar. Si el archivo no se puede escribir, te avisa y termina como «no exportado».",
+    refs: ["cli.py · export_research()", "cli.py · file_name_error()", "wiki_enrichment_orchestrator.py · export_document()", "infrastructure/exporters.py · DocumentExporterAdapter"],
+    lanes: [L_USER, L_CLI, L_ORQ, lane("DocumentExporterAdapter", "infrastructure/exporters.py", C.magenta), lane("Disco", "output/", C.blue)],
+    frames: [
+      M(1, 0, "¿Exportar? (Y/N)", { cap: "Te pregunta si quieres guardar.", term: [T.q(MSG.EXPORT_Q)], ref: "cli.py · export_research()" }),
+      M(0, 1, "«Y»", { cap: "Dices que sí.", term: [T.a("Y")] }),
+      M(1, 0, "¿PDF o TXT?", { cap: "Eliges el formato con una letra.", term: [T.q(MSG.FORMAT_Q)] }),
+      M(0, 1, "«P»", { cap: "P de PDF.", term: [T.a("P")] }),
+      M(1, 0, "¿Nombre?", { cap: "Le pones nombre al archivo.", term: [T.q(MSG.FILE_Q)] }),
+      M(0, 1, "«agujeros_negros»", { cap: "Escribes el nombre.", term: [T.a("agujeros_negros")] }),
+      N(1, "file_name_error()", { cap: "Comprueba que el nombre vale en Windows: sin \\ / : * ? \" < > |, sin punto al final, que no sea un nombre reservado (CON, PRN, AUX, NUL, COM1–9, LPT1–9) y de 100 caracteres como mucho.", tec: "Si escribes «agujeros_negros.pdf», quita el `.pdf` para no repetirlo.", ref: "cli.py · file_name_error()" }),
+      M(1, 0, "¿Resumen PDF o TXT?", { cap: "Solo si hiciste resumen: eliges su formato por separado.", term: [T.q(MSG.SUMMARY_FORMAT_Q)], ref: "cli.py · BriefSummaryFlow.ask_format()" }),
+      M(0, 1, "«T»", { cap: "T de TXT.", term: [T.a("T")] }),
+      M(1, 2, "export_document(PDF)", { cap: "El CLI pide guardar el documento.", tec: "Ruta `output/agujeros_negros.pdf`. Solo acepta `\"TXT\"` o `\"PDF\"`.", ref: "wiki_enrichment_orchestrator.py · export_document()", term: [T.p("Exportando agujeros_negros.pdf...")] }),
+      M(2, 3, "export_pdf()", { port: "DocumentExporter", cap: "El orquestador elige la función según el formato y la llama por el enchufe." }),
+      M(3, 4, "escribe el PDF", { cap: "Crea la carpeta si no existe y sobrescribe si ya había un archivo igual. Dentro: el título y tres apartados; si alguno está vacío, pone «(No disponible)».", tec: "`fpdf2`, tamaño A4, márgenes de 20 mm y la fuente DejaVu incluida en el proyecto (acentos, griego, cirílico).", ref: "exporters.py · create_pdf_document()" }),
+      M(1, 2, "export_summary(TXT)", { cap: "Guarda el resumen al lado, con «_summary» en el nombre.", tec: "`output/agujeros_negros_summary.txt`", ref: "cli.py · summary_path()", term: [T.p("Exportando agujeros_negros_summary.txt...")] }),
+      M(2, 3, "export_summary_txt()", { port: "DocumentExporter", cap: "Mismo enchufe, otra función." }),
+      M(3, 4, "escribe el TXT", { cap: "Texto plano con los apartados «Resumen breve» y «Resumen traducido».", tec: "Codificación UTF-8; los títulos se subrayan con `=` y `-`.", ref: "exporters.py · format_txt_document()" }),
+      M(1, 0, "ruta guardada", { cap: "Te dice dónde ha quedado el archivo, con la ruta completa.", term: [T.txt("Archivo guardado en " + EX.path, "c-dim")] }),
+    ],
+    alt: {
+      label: "Si no exportas o falla", intro: "No guardar es una opción válida; los errores se explican.",
+      frames: [
+        M(1, 0, "¿Exportar? (Y/N)", { cap: "Te pregunta.", term: [T.q(MSG.EXPORT_Q)] }),
+        M(0, 1, "«N»", { cap: "Si no quieres guardar, no se crea ningún archivo.", tec: "Se devuelve `(\"No\", \"-\")` para la tabla final.", term: [T.a("N")] }),
+        M(1, 0, "¿Nombre?", { cap: "Otro caso: sí exportas, pero el nombre no vale.", term: [T.q(MSG.FILE_Q)] }),
+        M(0, 1, "«notas?»", { err: true, cap: "Escribes un símbolo prohibido.", term: [T.a("notas?")] }),
+        M(1, 0, "nombre no válido", { err: true, cap: "Te dice qué símbolo sobra y vuelve a preguntar.", term: [T.err("El nombre no puede llevar estos símbolos: ?"), T.q(MSG.FILE_Q)] }),
+        M(3, 4, "escribe el PDF", { cap: "Otro caso: el nombre vale, pero el disco no deja escribir." }),
+        R(4, 3, "sin permiso", { err: true, cap: "No se puede escribir el archivo.", tec: "`OSError` o `FPDFException` → `ExportError`.", ref: "exporters.py · save_file()" }),
+        M(1, 0, "aviso", { err: true, cap: "Te avisa y sigue hasta el final como «no exportado».", term: [T.err("No he podido guardar el archivo. Revisa que tienes permisos y espacio en disco.")] }),
+      ],
+    },
+  },
+  {
+    key: "cierre", color: C.cyan, title: "Resumen final y despedida", sub: "Tabla con lo que se ha hecho.",
+    layers: ["P", "I"], input: "tema, idioma y resultado de exportar", output: "fin · log completo en logs/",
+    plain: "Para terminar, Joselito te enseña una tabla con el tema, el idioma y el archivo guardado, se despide y apunta en el log que todo ha acabado.",
+    example: "Tema: Agujero negro · Idioma: inglés · Exportado: PDF · Archivo: output/agujeros_negros.pdf",
+    fail: "Si el programa terminó antes (por ejemplo, porque falló la traducción), el log acaba con «Application finished with errors».",
+    refs: ["cli.py · show_summary()", "cli.py · say_goodbye()", "cli.py · main()"],
+    lanes: [L_USER, L_CLI, L_ORQ_OFF, L_LOG, L_LOGS],
+    frames: [
+      M(1, 0, "tabla «Resumen»", { cap: "Te enseña una tabla con lo que se ha hecho.", ref: "cli.py · show_summary()", term: [T.table([["Tema", "Agujero negro"], ["Idioma", "inglés"], ["Exportado", "PDF"], ["Archivo", "output/agujeros_negros.pdf"]])] }),
+      M(1, 0, "despedida", { cap: "Se despide con otro cartel.", ref: "cli.py · say_goodbye()", term: [T.txt("=========================================================", "c-fg"), T.txt("Mi trabajo aquí ha terminado, nos vemos cuando quieras.", "c-white", true), T.txt("=========================================================", "c-fg"), T.ban("PLACER")] }),
+      M(1, 3, "Application finished", { cap: "Apunta el final en el log.", tec: "`logger.info(\"Application finished\")`" }),
+      M(3, 4, "app_7828eef5.log", { cap: "El archivo de log guarda toda la historia de la ejecución, con el mismo código en cada línea.", tec: "Resumen de un log real del proyecto: `Topic selected: HP` → `Searching articles` → `First result confirmed` → `Enriching article` → `AI enrichment ready: characters=1890` → `Application finished`." }),
+    ],
+  },
+];
+
+/* ============================================================
+   Utilidades
+   ============================================================ */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const wbr = (s) => esc(s).replace(/([a-z])([A-Z])/g, "$1<wbr>$2").replace(/([/.])/g, "$1<wbr>");
+const fmt = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+const RM = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+function revealBanner(el, text, delay) {
+  el.innerHTML = text.split("\n").map((l, i) => `<span class="ln" style="animation-delay:${delay + i * 70}ms">${esc(l) || " "}</span>`).join("");
+}
+revealBanner($("#bHola"), BANNERS.HOLA, 0);
+revealBanner($("#bJoselito"), BANNERS.JOSELITO, 500);
+
+/* ============================================================
+   Vista 1: recorrido general
+   ============================================================ */
+const rail = $("#rail"), packet = $("#packet"), exBody = $("#exBody"), exTitle = $("#exTitle"), exTimer = $("#exTimer"), explain = $("#explain");
+const chipsHtml = (layers) => layers.map((k) => `<span class="chip" style="--k:${LAYER[k][1]}">${LAYER[k][0]}</span>`).join("");
+
+rail.innerHTML = STEPS.map((s, i) => `
+  <li><button class="node" type="button" data-i="${i}" style="--c:${s.color}" aria-label="Paso ${i + 1}: ${esc(s.title)}. Abrir su animación">
+    <span class="num">${String(i + 1).padStart(2, "0")}</span>
+    <span class="txt"><span class="ttl">${esc(s.title)}</span><span class="sub">${esc(s.sub)}</span>
+      ${s.tags ? `<span class="tags">${s.tags.map(([t, c]) => `<span class="tag ${c}">${esc(t)}</span>`).join("")}</span>` : ""}</span>
+    <span class="go">ver animación ▸</span>
+  </button></li>`).join("");
+$("#legend").innerHTML = `<span class="lbl">Capas</span>` + chipsHtml(Object.keys(LAYER)) +
+  `<span>· Cada paso lleva el mismo color que usa Joselito en la terminal para ese momento.</span>`;
+
+let ovIndex = 0, tourOn = !RM, tourTimer = null, tourStart = 0;
+const TOUR_MS = 6500;
+
+function showOverview(i, animate = true) {
+  ovIndex = i;
+  const s = STEPS[i];
+  rail.querySelectorAll(".node").forEach((n, k) => { n.classList.toggle("on", k === i); n.classList.toggle("done", k < i); });
+  const node = rail.querySelectorAll(".node")[i];
+  const num = node.querySelector(".num");
+  const wrapBox = $(".rail-wrap").getBoundingClientRect(), nb = num.getBoundingClientRect();
+  packet.style.top = (nb.top - wrapBox.top + nb.height / 2 - 23) + "px";
+  packet.style.left = (nb.left - wrapBox.left + nb.width / 2 - 23) + "px";
+  packet.style.setProperty("--pc", s.color);
+  packet.style.opacity = 1;
+  explain.style.setProperty("--ec", s.color);
+  exTitle.textContent = `Paso ${i + 1} de ${STEPS.length}`;
+  const html = `
+    <div class="chips">${chipsHtml(s.layers)}</div>
+    <h2>${esc(s.title)}</h2>
+    <p>${fmt(s.plain)}</p>
+    <p class="example"><span class="lbl">Ejemplo</span>${fmt(s.example)}</p>
+    <dl class="io"><dt>Entra</dt><dd>${esc(s.input)}</dd><dt>Sale</dt><dd>${esc(s.output)}</dd></dl>
+    <p><span class="lbl red">Si algo falla</span>${fmt(s.fail)}</p>
+    <div><button class="btn primary" type="button" id="exGo">Entrar en la animación del paso ▸</button></div>`;
+  if (animate && !RM) {
+    exBody.classList.add("out");
+    setTimeout(() => { exBody.innerHTML = html; bindGo(); exBody.classList.remove("out"); }, 220);
+  } else { exBody.innerHTML = html; bindGo(); }
+  function bindGo() { $("#exGo").onclick = () => openScene(i); }
+}
+function tourTick() {
+  if (!tourOn) return;
+  const p = Math.min(1, (performance.now() - tourStart) / TOUR_MS);
+  exTimer.style.width = (p * 100) + "%";
+  if (p >= 1) { showOverview((ovIndex + 1) % STEPS.length); tourStart = performance.now(); }
+  tourTimer = requestAnimationFrame(tourTick);
+}
+function setTour(on) {
+  tourOn = on;
+  $("#tourBtn").textContent = on ? "⏸ Pausar recorrido" : "▶ Recorrer el flujo";
+  cancelAnimationFrame(tourTimer);
+  if (on) { tourStart = performance.now(); tourTick(); } else exTimer.style.width = "0";
+}
+$("#tourBtn").onclick = () => setTour(!tourOn);
+rail.addEventListener("click", (e) => { const b = e.target.closest(".node"); if (b) openScene(+b.dataset.i); });
+rail.addEventListener("mouseover", (e) => { const b = e.target.closest(".node"); if (b && tourOn) { setTour(false); } if (b && +b.dataset.i !== ovIndex) showOverview(+b.dataset.i); });
+window.addEventListener("resize", () => { if (!$("#vista-flujo").hidden) showOverview(ovIndex, false); });
+
+/* ============================================================
+   Escena de un paso: diagrama de secuencia + terminal
+   ============================================================ */
+const LX = [60, 180, 300, 420, 540], ROW = 56, TOP = 14;
+const seq = $("#seq"), seqScroll = $("#seqScroll"), term = $("#term"), caption = $("#caption");
+let sc = { step: 0, alt: false, f: 0, playing: !RM, timer: null, raf: null };
+
+function frames() { const s = STEPS[sc.step]; return sc.alt && s.alt ? s.alt.frames : s.frames; }
+function laneColor(i) { return STEPS[sc.step].lanes[i].color; }
+
+function openScene(i, alt = false) {
+  setTour(false);
+  sc.step = i; sc.alt = alt; sc.f = 0;
+  const s = STEPS[i];
+  $("#vista-flujo").hidden = true; $("#vista-capas").hidden = true; $("#escena").hidden = false;
+  document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", "false"));
+  $("#escena").style.setProperty("--sc", s.color);
+  $("#scEyebrow").textContent = `Paso ${i + 1} de ${STEPS.length} · ` + s.layers.map((k) => LAYER[k][0]).join(" · ");
+  $("#scTitle").textContent = s.title;
+  $("#scIntro").innerHTML = fmt(alt && s.alt ? s.alt.intro : s.plain);
+  $("#scPrevStep").disabled = i === 0; $("#scNextStep").disabled = i === STEPS.length - 1;
+  $("#modes").innerHTML = `<button class="mode" role="radio" type="button" aria-checked="${!alt}" data-alt="0">Camino normal</button>` +
+    (s.alt ? `<button class="mode alt" role="radio" type="button" aria-checked="${alt}" data-alt="1">${esc(s.alt.label)}</button>` : "");
+  $("#lanes").innerHTML = s.lanes.map((l, k) => `<div class="lane ${l.off ? "off" : ""}" data-k="${k}" style="--k:${l.color}"><b>${wbr(l.name)}</b><span>${wbr(l.sub)}</span></div>`).join("");
+  $("#refs").innerHTML = s.refs.map((r) => `<li><code>${esc(r)}</code></li>`).join("");
+  $("#dots").innerHTML = frames().map((fr, k) => `<button class="dot ${fr.err ? "err" : ""}" type="button" data-k="${k}" aria-label="Momento ${k + 1}"></button>`).join("");
+  try { history.replaceState(null, "", "#paso-" + (i + 1)); } catch (e) {}
+  document.body.classList.add("in-scene");
+  $("#escena").scrollIntoView({ behavior: RM ? "auto" : "smooth", block: "start" });
+  sc.playing = !RM;
+  $("#fPlay").textContent = sc.playing ? "⏸ Pausar" : "▶ Reproducir";
+  render(true);
+}
+function closeScene() {
+  stopTimers();
+  document.body.classList.remove("in-scene");
+  $("#escena").hidden = true; $("#vista-flujo").hidden = false;
+  $("#tab-flujo").setAttribute("aria-selected", "true");
+  try { history.replaceState(null, "", "#flujo"); } catch (e) {}
+  showOverview(sc.step, false);
+}
+
+function rowY(k) { return TOP + k * ROW + 34; }
+function svgRow(fr, k, cur) {
+  const y = rowY(k), cls = `row ${cur ? "cur" : "past"}`;
+  const color = fr.err ? C.red : laneColor(fr.type === "note" ? fr.at : fr.f);
+  const idx = `<text class="idx" x="4" y="${y + 4}">${k + 1}</text>`;
+  if (fr.type === "note") {
+    const w = Math.min(250, fr.label.length * 6.7 + 22);
+    let x = LX[fr.at] - w / 2; x = Math.max(16, Math.min(596 - w, x));
+    return `<g class="${cls} nt">${idx}<rect x="${x}" y="${y - 14}" width="${w}" height="26" rx="4" fill="var(--bg)" stroke="${color}"/>
+      <text x="${x + w / 2}" y="${y + 3.5}" fill="${color}">${esc(fr.label)}</text></g>`;
+  }
+  const x1 = LX[fr.f], x2 = LX[fr.t], dir = x2 > x1 ? 1 : -1, mid = (x1 + x2) / 2;
+  const head = `${x2},${y} ${x2 - 8 * dir},${y - 4.5} ${x2 - 8 * dir},${y + 4.5}`;
+  return `<g class="${cls}">${idx}
+    <line class="ln" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${color}" stroke-width="1.7" ${fr.ret ? 'stroke-dasharray="5 4"' : ""}/>
+    <polygon class="hd" points="${head}" fill="${color}"/>
+    ${fr.port ? `<text class="pt" x="${mid}" y="${y - 23}">‹puerto ${esc(fr.port)}›</text>` : ""}
+    <text class="lb" x="${mid}" y="${y - 9}" fill="${color}">${esc(fr.label)}</text>
+    ${cur ? `<circle class="pk" r="3.6" cx="${x1}" cy="${y}" fill="${color}" opacity="0"/>` : ""}</g>`;
+}
+
+function stopTimers() { clearTimeout(sc.timer); cancelAnimationFrame(sc.raf); }
+
+function render(animate) {
+  stopTimers();
+  const fr = frames(), s = STEPS[sc.step], n = fr.length, k = sc.f;
+  const H = TOP + n * ROW + 20;
+  seq.setAttribute("viewBox", `0 0 600 ${H}`);
+  let out = s.lanes.map((l, i) => `<line x1="${LX[i]}" y1="0" x2="${LX[i]}" y2="${H}" stroke="${l.color}" stroke-opacity="${l.off ? 0.12 : 0.32}" stroke-dasharray="2 5"/>`).join("");
+  for (let j = 0; j <= k; j++) out += svgRow(fr[j], j, j === k);
+  seq.innerHTML = out;
+
+  // carriles activos
+  const cur = fr[k], hot = cur.type === "note" ? [cur.at] : [cur.f, cur.t];
+  document.querySelectorAll("#lanes .lane").forEach((el) => el.classList.toggle("hot", hot.includes(+el.dataset.k)));
+
+  // animación de la flecha actual
+  const g = seq.querySelector(".row.cur");
+  if (animate && !RM && cur.type === "msg") {
+    g.classList.add("drawing");
+    const ln = g.querySelector(".ln"), pk = g.querySelector(".pk");
+    const x1 = LX[cur.f], x2 = LX[cur.t], t0 = performance.now(), D = 520;
+    const step = (t) => {
+      const p = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - p, 3);
+      ln.setAttribute("x2", x1 + (x2 - x1) * e);
+      if (p < 1) sc.raf = requestAnimationFrame(step);
+      else { g.classList.remove("drawing"); travel(pk, x1, x2); }
+    };
+    ln.setAttribute("x2", x1);
+    sc.raf = requestAnimationFrame(step);
+  } else if (cur.type === "msg" && !RM) {
+    travel(g.querySelector(".pk"), LX[cur.f], LX[cur.t]);
+  }
+  function travel(pk, a, b) {
+    if (!pk || RM) return;
+    pk.setAttribute("opacity", 1);
+    const t0 = performance.now(), D = 1300;
+    const loop = (t) => { const p = ((t - t0) % (D + 400)) / D; const q = Math.min(1, p); pk.setAttribute("cx", a + (b - a) * q); pk.setAttribute("opacity", p > 1 ? 0 : 1); sc.raf = requestAnimationFrame(loop); };
+    sc.raf = requestAnimationFrame(loop);
+  }
+
+  // desplazar el diagrama hasta el momento actual (vertical y, en pantallas estrechas, horizontal)
+  requestAnimationFrame(() => {
+    const sx = $(".stage-x"), cx = hot.reduce((acc, i) => acc + LX[i], 0) / hot.length;
+    if (sx.scrollWidth > sx.clientWidth) sx.scrollTo({ left: Math.max(0, cx / 600 * sx.scrollWidth - sx.clientWidth / 2), behavior: RM ? "auto" : "smooth" });
+    const scale = seq.clientWidth / 600;
+    seqScroll.scrollTop = Math.max(0, rowY(k) * scale - seqScroll.clientHeight / 2);
+  });
+
+  renderTerm(animate);
+  // texto explicativo
+  caption.innerHTML = `<span class="fn ${cur.err ? "err" : ""}">${k + 1}/${n}</span>
+    <p class="cap ${animate ? "anim" : ""}">${fmt(cur.cap || cur.label)}</p>
+    ${cur.tec || cur.ref ? `<p class="tec ${animate ? "anim" : ""}">${cur.ref ? `<span class="ref">${esc(cur.ref)}</span>` : ""}${cur.tec ? fmt(cur.tec) : ""}</p>` : ""}`;
+  document.querySelectorAll("#dots .dot").forEach((d, j) => { d.classList.toggle("past", j < k); d.classList.toggle("cur", j === k); });
+  $("#counter").textContent = `${k + 1} de ${n}`;
+  $("#fPrev").disabled = k === 0; $("#fNext").disabled = k === n - 1;
+  const atEnd = k === n - 1, hasNext = sc.step < STEPS.length - 1;
+  $("#endNext").classList.toggle("show", atEnd);
+  $("#endText").textContent = !sc.alt && s.alt ? `Fin del camino normal. También puedes ver «${s.alt.label}».` : "Fin de este paso.";
+  $("#endBtn").textContent = hasNext ? `Paso ${sc.step + 2}: ${STEPS[sc.step + 1].title} ▸` : "Volver al flujo";
+  if (sc.playing && !atEnd) {
+    const len = (cur.cap || "").length + (cur.tec || "").length * 0.5;
+    sc.timer = setTimeout(() => { sc.f++; render(true); }, Math.min(8000, 2400 + len * 32));
+  } else if (atEnd && sc.playing) { setPlaying(false); }
+}
+
+function renderTerm(animate) {
+  const fr = frames();
+  term.innerHTML = "";
+  let lastQ = null;
+  for (let j = 0; j <= sc.f; j++) {
+    for (const it of fr[j].term || []) {
+      const isNew = animate && j === sc.f && !RM;
+      if (it.k === "a") {
+        if (!lastQ) continue;
+        const span = lastQ.querySelector(".ans"), caret = lastQ.querySelector(".caret");
+        if (caret) caret.remove();
+        if (isNew && it.text) typeText(span, it.text); else span.textContent = it.text;
+        lastQ = null; continue;
+      }
+      const el = termItem(it, isNew);
+      if (isNew) el.classList.add("new");
+      term.appendChild(el);
+      if (it.k === "q") lastQ = el;
+    }
+  }
+  requestAnimationFrame(() => { term.scrollTop = term.scrollHeight; });
+}
+function typeText(el, text) {
+  let i = 0; el.textContent = "";
+  const tick = () => { el.textContent = text.slice(0, ++i); if (i < text.length) setTimeout(tick, 45); };
+  setTimeout(tick, 250);
+}
+function termItem(it, isNew) {
+  const d = document.createElement("div");
+  if (it.k === "q") {
+    d.innerHTML = `<div class="t-rule"></div><div class="t-q"># ${esc(it.text)}\n  <span class="ar">»</span> <span class="ans"></span><span class="caret"></span></div>`;
+  } else if (it.k === "p") {
+    d.className = "t-prog" + (isNew ? "" : " full");
+    d.innerHTML = `<span class="sp">${isNew ? "⠋" : " "}</span><span class="ds">${esc(it.text)}</span><span class="bar"><i style="width:${isNew ? 0 : 100}%"></i></span><span class="pc">${isNew ? 0 : 100}%</span>`;
+    if (isNew) {
+      const sp = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", t0 = performance.now(), D = 1400, bar = d.querySelector("i"), pc = d.querySelector(".pc"), s = d.querySelector(".sp");
+      const loop = (t) => { const p = Math.min(1, (t - t0) / D); const v = p < .8 ? 0 : (p - .8) / .2;
+        s.textContent = p < 1 ? sp[Math.floor((t - t0) / 80) % sp.length] : " ";
+        bar.style.width = (v * 100) + "%"; pc.textContent = Math.round(v * 100) + "%";
+        if (p < 1) requestAnimationFrame(loop); else d.classList.add("full"); };
+      requestAnimationFrame(loop);
+    }
+  } else if (it.k === "pnl") {
+    d.className = "t-pnl" + (it.err ? " err" : "");
+    d.style.setProperty("--k", it.color);
+    d.innerHTML = `<span class="tt">${esc(it.title)}</span>${esc(it.body)}`;
+  } else if (it.k === "ban") {
+    d.innerHTML = `<pre class="t-ban">${esc(BANNERS[it.key])}</pre>`;
+  } else if (it.k === "table") {
+    d.innerHTML = `<table class="t-tab"><caption>Resumen</caption><thead><tr><th>Dato</th><th>Valor</th></tr></thead><tbody>${it.rows.map((r) => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td></tr>`).join("")}</tbody></table>`;
+  } else {
+    d.className = "t-txt " + (it.cls || "");
+    if (it.bold) d.style.fontWeight = 700;
+    d.textContent = it.text;
+  }
+  return d;
+}
+function setPlaying(on) {
+  sc.playing = on;
+  $("#fPlay").textContent = on ? "⏸ Pausar" : "▶ Reproducir";
+  if (on && sc.f === frames().length - 1) { sc.f = 0; render(true); return; }
+  if (on) render(false); else clearTimeout(sc.timer);
+}
+function goFrame(k) { sc.f = Math.max(0, Math.min(frames().length - 1, k)); render(true); }
+
+$("#fPlay").onclick = () => setPlaying(!sc.playing);
+$("#fPrev").onclick = () => { setPlaying(false); goFrame(sc.f - 1); };
+$("#fNext").onclick = () => { setPlaying(false); goFrame(sc.f + 1); };
+$("#fRestart").onclick = () => { sc.f = 0; sc.playing = true; $("#fPlay").textContent = "⏸ Pausar"; render(true); };
+$("#dots").addEventListener("click", (e) => { const d = e.target.closest(".dot"); if (d) { setPlaying(false); goFrame(+d.dataset.k); } });
+$("#modes").addEventListener("click", (e) => { const m = e.target.closest(".mode"); if (m) openScene(sc.step, m.dataset.alt === "1"); });
+$("#scBack").onclick = closeScene;
+$("#scPrevStep").onclick = () => openScene(sc.step - 1);
+$("#scNextStep").onclick = () => openScene(sc.step + 1);
+$("#endBtn").onclick = () => sc.step < STEPS.length - 1 ? openScene(sc.step + 1) : closeScene();
+document.addEventListener("keydown", (e) => {
+  if ($("#escena").hidden || e.target.closest("input,textarea")) return;
+  if (e.key === "ArrowRight") { e.preventDefault(); setPlaying(false); goFrame(sc.f + 1); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); setPlaying(false); goFrame(sc.f - 1); }
+  else if (e.key === " " && !e.target.closest("button")) { e.preventDefault(); setPlaying(!sc.playing); }
+  else if (e.key === "Escape") closeScene();
+});
+
+/* ============================================================
+   Vista 2: capas (hexágono) y enchufes
+   ============================================================ */
+const INFO = {
+  dominio: { c: C.green, t: "Dominio", file: "src/domain/", h: "El centro: los datos y las reglas",
+    p: "Las piezas básicas del programa, sin saber nada de internet, de la IA ni de archivos. Es la parte que menos cambia.",
+    list: ["`models.py`: `ArticleContent`, `SearchResult`, `EnrichedContent`, `BriefSummary`. Son datos que no se pueden modificar (`frozen=True`).", "`ports.py`: los 5 enchufes, definidos como `typing.Protocol`.", "`exceptions.py`: los errores propios del programa."],
+    pre: "WikiEnrichmentError\n├── ResourceNotFoundError   (no existe)\n├── ProviderTimeoutError    (tarda demasiado)\n├── RateLimitError          (espera N segundos)\n├── EnrichmentError         (falla la IA)\n│   └── SummarizationError  (falla el resumen)\n└── ExportError             (no se pudo guardar)",
+    rule: "No importa nada de las otras capas: solo `dataclasses` y `typing` de Python." },
+  aplicacion: { c: C.cyan, t: "Aplicación", file: "src/application/wiki_enrichment_orchestrator.py", h: "El orquestador",
+    p: "Coordina los pasos. Pide cosas a los enchufes sin saber qué aparato hay conectado detrás. También apunta en el log cada paso y cada error.",
+    list: ["`search_articles()` y `fetch_article_by_title()`: buscar y descargar.", "`enrich_article()`, `summarize()`: IA.", "`translate_article()` y `translate_text()`: traducir.", "`export_document()` y `export_summary()`: guardar en `\"TXT\"` o `\"PDF\"`.", "`fetch_article()` y `execute()`: el recorrido completo de una vez (exporta TXT y PDF a la vez). Lo usan los tests; el CLI no, porque necesita preguntarte entre paso y paso."],
+    rule: "Recibe las 5 piezas por el constructor. Observación: importa `LOGGER_NAME` de `infrastructure.logging_config`; es una pequeña excepción a la regla «hacia dentro», aunque solo sea el nombre del logger." },
+  cli: { c: C.yellow, t: "Presentación", file: "cli.py", h: "Lo que ves en la terminal",
+    p: "Hace las preguntas, enseña los recuadros de colores y las barras, gestiona los reintentos y traduce los errores a mensajes en español.",
+    list: ["`typer`: las opciones `--tema` y `--idioma`.", "`rich`: paneles, barras de progreso, tablas y la cuenta atrás.", "`pyfiglet`: los carteles de letras grandes."],
+    rule: "Todo el trabajo lo pide al orquestador. Además importa modelos y excepciones del dominio (para enseñar datos y capturar errores), `bootstrap` (para montar las piezas) y `logging_config` (para el log)." },
+  bootstrap: { c: C.fg, t: "Composición", file: "src/bootstrap.py", h: "bootstrap: donde se enchufa todo",
+    p: "El único sitio que crea los adaptadores concretos y los conecta al orquestador. También carga el archivo .env.",
+    list: ["`build_orchestrator(wikipedia_language=\"es\")`", "`build_content_enricher()` y `build_content_summarizer()`: DeepSeek o el suplente si falta la clave.", "`_load_local_env_file()`: lee `.env` sin pisar variables que ya existan."],
+    rule: "Si mañana se cambia DeepSeek por otra IA, solo hay que tocar este archivo y escribir el adaptador nuevo." },
+  logging: { c: C.magenta, t: "Infraestructura", file: "src/infrastructure/logging_config.py", h: "El log",
+    p: "Prepara el diario de cada ejecución. Lo usan todas las capas, por eso está aparte.",
+    list: ["Un archivo por ejecución: `logs/app_<run_id>.log`.", "Rotación: 1 MB por archivo, hasta 5 copias.", "Hora en UTC y el `run_id` en cada línea.", "Nivel con la variable `LOG_LEVEL` (por defecto `INFO`)."],
+    rule: "Observación: el filtro que oculta secretos solo reconoce tokens de Hugging Face (`hf_…`), no las claves de DeepSeek (`sk-…`). El traductor sí borra su clave de los mensajes de error." },
+  p_wiki: { c: C.green, t: "Puerto", file: "domain/ports.py · WikipediaSource", h: "WikipediaSource",
+    p: "El enchufe para conseguir artículos.", pre: "fetch_article(topic) -> ArticleContent\nsearch(topic) -> list[SearchResult]\nfetch_article_by_title(title) -> ArticleContent",
+    rule: "Programa real: `WikipediaSourceAdapter`. Tests: `FakeWikipediaSource`." },
+  p_enrich: { c: C.green, t: "Puerto", file: "domain/ports.py · ContentEnricher", h: "ContentEnricher",
+    p: "El enchufe para enriquecer un artículo con IA.", pre: "enrich(article) -> EnrichedContent",
+    rule: "Programa real: `DeepSeekEnricher`, o `AIContentEnricher` si falta la clave. Tests: `FakeContentEnricher`." },
+  p_sum: { c: C.green, t: "Puerto", file: "domain/ports.py · ContentSummarizer", h: "ContentSummarizer",
+    p: "El enchufe para hacer un resumen breve.", pre: "summarize(text) -> str",
+    rule: "Programa real: `DeepSeekSummarizer`, o `AIContentSummarizer` si falta la clave. Tests: un doble creado con `create_autospec(ContentSummarizer)`." },
+  p_trans: { c: C.green, t: "Puerto", file: "domain/ports.py · Translator", h: "Translator",
+    p: "El enchufe para traducir un texto.", pre: "translate(text, target_lang) -> str",
+    rule: "Programa real: `TranslationAdapter` (Google). Tests: `FakeTranslator`." },
+  p_exp: { c: C.green, t: "Puerto", file: "domain/ports.py · DocumentExporter", h: "DocumentExporter",
+    p: "El enchufe para guardar documentos.", pre: "export_txt(content, path)\nexport_pdf(content, path)\nexport_summary_txt(summary, path)\nexport_summary_pdf(summary, path)",
+    rule: "Programa real: `DocumentExporterAdapter`. Tests: `FakeDocumentExporter`." },
+  a_wiki: { c: C.magenta, t: "Adaptador", file: "src/infrastructure/wikipedia.py", h: "WikipediaSourceAdapter",
+    p: "Habla con Wikipedia: busca con su API y descarga la página para quedarse con 5 párrafos.",
+    list: ["`requests` para las peticiones (10 s como máximo) y `BeautifulSoup` para leer el HTML.", "Convierte los fallos de red en errores del dominio: `ProviderTimeoutError`, `RateLimitError`, `ResourceNotFoundError`, `WikiEnrichmentError`."],
+    rule: "En los tests se sustituye por `FakeWikipediaSource`, que devuelve un artículo fijo sin usar internet." },
+  a_enrich: { c: C.magenta, t: "Adaptador", file: "src/infrastructure/deepseek_enricher.py", h: "DeepSeekEnricher",
+    p: "Envía el artículo a DeepSeek y devuelve el texto enriquecido.",
+    list: ["API compatible con OpenAI: `POST {base}/chat/completions`.", "Recorta a 4.000 caracteres, `max_tokens=600`, 60 s de espera.", "Suplente: `AIContentEnricher` (en `ai.py`), que siempre falla con un motivo claro."],
+    rule: "En los tests: `FakeContentEnricher`." },
+  a_sum: { c: C.magenta, t: "Adaptador", file: "src/infrastructure/deepseek_summarizer.py", h: "DeepSeekSummarizer",
+    p: "Pide a DeepSeek un resumen de tres o cuatro frases.",
+    list: ["`max_tokens=200`, 60 s de espera.", "Suplente: `AIContentSummarizer` (en `ai.py`)."],
+    rule: "En los tests se usa un doble de `unittest.mock` con la misma forma que el puerto." },
+  a_trans: { c: C.magenta, t: "Adaptador", file: "src/infrastructure/translation.py", h: "TranslationAdapter",
+    p: "Traduce con Google Cloud Translation (versión Basic v2).",
+    list: ["Idioma de origen fijo: español (`es`).", "Trozos de 5.000 caracteres como mucho.", "Hasta 2 reintentos con errores 429 o 5xx.", "Clave en la cabecera `x-goog-api-key` y borrada de los mensajes de error."],
+    rule: "En los tests: `FakeTranslator`, que añade la etiqueta del idioma, por ejemplo « [fr]»." },
+  a_exp: { c: C.magenta, t: "Adaptador", file: "src/infrastructure/exporters.py", h: "DocumentExporterAdapter",
+    p: "Escribe los archivos TXT y PDF.",
+    list: ["PDF con `fpdf2`, A4, márgenes de 20 mm y fuente DejaVu incluida en `infrastructure/fonts/`.", "TXT en UTF-8 con títulos subrayados.", "Documento: «Contenido original (Wikipedia)», «Contenido enriquecido (IA)», «Contenido traducido». Resumen: «Resumen breve», «Resumen traducido».", "Crea carpetas si faltan; si falla, lanza `ExportError`."],
+    rule: "En los tests: `FakeDocumentExporter`, que solo guarda en una lista lo que le piden." },
+};
+
+const CX = 400, CY = 285;
+function hexPts(r) { return Array.from({ length: 6 }, (_, k) => { const a = (Math.PI / 180) * (60 * k - 90); return `${CX + r * Math.cos(a)},${CY + r * Math.sin(a)}`; }).join(" "); }
+const SOCK = {
+  p_wiki: { x: 530, y: 190, label: "WikipediaSource" },
+  p_enrich: { x: 548, y: 250, label: "ContentEnricher" },
+  p_sum: { x: 548, y: 320, label: "ContentSummarizer" },
+  p_trans: { x: 473, y: 412, label: "Translator" },
+  p_exp: { x: 327, y: 412, label: "DocumentExporter" },
+};
+const ADS = {
+  a_wiki: { x: 640, y: 70, sock: "p_wiki", prod: ["WikipediaSourceAdapter", "→ es.wikipedia.org"], test: ["FakeWikipediaSource", "artículo fijo, sin red"] },
+  a_enrich: { x: 690, y: 190, sock: "p_enrich", prod: ["DeepSeekEnricher", "→ api.deepseek.com"], test: ["FakeContentEnricher", "texto fijo, sin red"] },
+  a_sum: { x: 690, y: 380, sock: "p_sum", prod: ["DeepSeekSummarizer", "→ api.deepseek.com"], test: ["create_autospec(…)", "doble de unittest.mock"] },
+  a_trans: { x: 640, y: 500, sock: "p_trans", prod: ["TranslationAdapter", "→ Google Translate"], test: ["FakeTranslator", "añade « [idioma]»"] },
+  a_exp: { x: 160, y: 500, sock: "p_exp", prod: ["DocumentExporterAdapter", "→ output/ (TXT, PDF)"], test: ["FakeDocumentExporter", "lo guarda en una lista"] },
+};
+let lyTests = false, lySel = "dominio";
+
+function boxSvg(key, x, y, w, h, color, l1, l2, extra = "") {
+  return `<g class="hit ${extra}" data-key="${key}" tabindex="0" role="button" aria-label="${esc(l1)}" style="--glow:${color}">
+    <rect class="box" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="5" fill="var(--bg)" stroke="${color}" stroke-width="1.3"/>
+    <text class="l1" x="${x}" y="${y - 3}" text-anchor="middle" font-size="12" font-weight="600" fill="${color}">${esc(l1)}</text>
+    <text class="l2" x="${x}" y="${y + 13}" text-anchor="middle" font-size="10" fill="var(--dim)">${esc(l2)}</text></g>`;
+}
+function drawHex() {
+  const svg = $("#hex");
+  let s = `<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dim)"/></marker></defs>`;
+  // anillo de aplicación y centro de dominio
+  s += `<g class="hit" data-key="aplicacion" tabindex="0" role="button" aria-label="Aplicación" style="--glow:var(--cyan)">
+      <polygon class="box" points="${hexPts(170)}" fill="color-mix(in srgb, var(--cyan) 7%, var(--bg))" stroke="var(--cyan)" stroke-width="1.3"/>
+      <text x="${CX}" y="${CY - 133}" text-anchor="middle" font-size="13" font-weight="700" fill="var(--cyan)">APLICACIÓN</text>
+      <text x="${CX}" y="${CY - 118}" text-anchor="middle" font-size="10.5" fill="var(--dim)">el orquestador</text></g>`;
+  s += `<g class="hit" data-key="dominio" tabindex="0" role="button" aria-label="Dominio" style="--glow:var(--green)">
+      <polygon class="box" points="${hexPts(92)}" fill="color-mix(in srgb, var(--green) 10%, var(--bg))" stroke="var(--green)" stroke-width="1.3"/>
+      <text x="${CX}" y="${CY - 18}" text-anchor="middle" font-size="14" font-weight="700" fill="var(--green)">DOMINIO</text>
+      <text x="${CX}" y="${CY + 2}" text-anchor="middle" font-size="10.5" fill="var(--fg)">modelos</text>
+      <text x="${CX}" y="${CY + 17}" text-anchor="middle" font-size="10.5" fill="var(--fg)">puertos</text>
+      <text x="${CX}" y="${CY + 32}" text-anchor="middle" font-size="10.5" fill="var(--fg)">excepciones</text></g>`;
+  // conexiones adaptador → enchufe (dependencia hacia dentro)
+  for (const [k, a] of Object.entries(ADS)) {
+    const p = SOCK[a.sock], id = "path-" + k;
+    s += `<path id="${id}" d="M${a.x},${a.y} L${p.x},${p.y}" stroke="var(--magenta)" stroke-opacity=".45" stroke-width="1.3" fill="none" stroke-dasharray="4 4" marker-end="url(#ah)"/>`;
+    if (!RM) s += `<circle r="3" fill="var(--magenta)"><animateMotion dur="2.4s" repeatCount="indefinite" begin="${(Object.keys(ADS).indexOf(k) * .4).toFixed(1)}s"><mpath href="#${id}"/></animateMotion></circle>`;
+  }
+  // CLI → aplicación, logging, bootstrap
+  s += `<path id="path-cli" d="M168,285 L228,285" stroke="var(--yellow)" stroke-opacity=".6" stroke-width="1.3" fill="none" marker-end="url(#ah)"/>`;
+  if (!RM) s += `<circle r="3" fill="var(--yellow)"><animateMotion dur="1.6s" repeatCount="indefinite"><mpath href="#path-cli"/></animateMotion></circle>`;
+  s += `<text x="198" y="276" text-anchor="middle" font-size="10" fill="var(--dim)">usa</text>`;
+  s += `<path d="M400,520 L400,458" stroke="var(--fg)" stroke-opacity=".5" stroke-width="1.3" fill="none" stroke-dasharray="3 4" marker-end="url(#ah)"/>`;
+  s += `<text x="412" y="494" font-size="10" fill="var(--dim)">monta y enchufa</text>`;
+  s += `<path d="M215,92 L300,172" stroke="var(--magenta)" stroke-opacity=".35" stroke-width="1.2" fill="none" stroke-dasharray="2 4"/>`;
+  s += `<text x="196" y="140" font-size="10" fill="var(--dim)">lo usan todas</text>`;
+  // enchufes (puertos)
+  for (const [k, p] of Object.entries(SOCK)) {
+    const w = p.label.length * 7 + 18;
+    s += `<g class="hit" data-key="${k}" tabindex="0" role="button" aria-label="Puerto ${p.label}" style="--glow:var(--green)">
+      <rect class="box" x="${p.x - w / 2}" y="${p.y - 11}" width="${w}" height="22" rx="11" fill="var(--panel)" stroke="var(--green)" stroke-width="1.3"/>
+      <text x="${p.x}" y="${p.y + 4}" text-anchor="middle" font-size="10.5" fill="var(--green)">${p.label}</text></g>`;
+  }
+  // adaptadores
+  for (const [k, a] of Object.entries(ADS)) {
+    const [l1, l2] = lyTests ? a.test : a.prod;
+    s += boxSvg(k, a.x, a.y, 196, 44, lyTests ? "var(--yellow)" : "var(--magenta)", l1, l2, "ad");
+  }
+  s += boxSvg("cli", 95, 285, 146, 44, "var(--yellow)", "cli.py", "Presentación");
+  s += boxSvg("logging", 150, 70, 196, 44, "var(--magenta)", "logging_config", "logs/app_<run_id>.log");
+  s += boxSvg("bootstrap", 400, 543, 210, 40, "var(--fg)", "bootstrap.py", "composición");
+  svg.innerHTML = s;
+  svg.querySelectorAll(".hit").forEach((h) => h.classList.toggle("sel", h.dataset.key === lySel));
+}
+function showInfo(key) {
+  lySel = key;
+  const d = INFO[key], el = $("#info");
+  el.style.setProperty("--ic", d.c);
+  el.innerHTML = `<span class="ptitle">${esc(d.t)}</span><h3>${esc(d.h)}</h3><div class="file">${esc(d.file)}</div><p>${fmt(d.p)}</p>
+    ${d.list ? `<ul>${d.list.map((x) => `<li>${fmt(x)}</li>`).join("")}</ul>` : ""}
+    ${d.pre ? `<pre>${esc(d.pre)}</pre>` : ""}
+    <p class="rule">${fmt(d.rule)}</p>`;
+  $("#hex").querySelectorAll(".hit").forEach((h) => h.classList.toggle("sel", h.dataset.key === key));
+}
+function setTests(on) {
+  if (on === lyTests) return;
+  $("#swProd").setAttribute("aria-pressed", String(!on)); $("#swTest").setAttribute("aria-pressed", String(on));
+  $("#lyRoot").classList.toggle("tests", on);
+  const flipOut = () => { lyTests = on; drawHex(); };
+  if (RM) flipOut(); else { $("#hex").querySelectorAll(".ad").forEach((a) => a.classList.add("flip")); setTimeout(flipOut, 260); }
+}
+$("#hex").addEventListener("click", (e) => { const h = e.target.closest(".hit"); if (h) showInfo(h.dataset.key); });
+$("#hex").addEventListener("keydown", (e) => { const h = e.target.closest(".hit"); if (h && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); showInfo(h.dataset.key); } });
+$("#swProd").onclick = () => setTests(false);
+$("#swTest").onclick = () => setTests(true);
+
+/* ============================================================
+   Pestañas y arranque
+   ============================================================ */
+function showTab(name) {
+  stopTimers();
+  document.body.classList.remove("in-scene");
+  $("#escena").hidden = true;
+  $("#vista-flujo").hidden = name !== "flujo"; $("#vista-capas").hidden = name !== "capas";
+  $("#tab-flujo").setAttribute("aria-selected", String(name === "flujo"));
+  $("#tab-capas").setAttribute("aria-selected", String(name === "capas"));
+  if (name === "flujo") { showOverview(ovIndex, false); } else setTour(false);
+  store.set("joselito-tab", name);
+  try { history.replaceState(null, "", "#" + name); } catch (e) {}
+}
+$("#tab-flujo").onclick = () => showTab("flujo");
+$("#tab-capas").onclick = () => showTab("capas");
+
+drawHex(); showInfo("dominio");
+const hash = (location.hash || "").slice(1);
+const m = hash.match(/^paso-(\d+)$/);
+if (m && +m[1] >= 1 && +m[1] <= STEPS.length) { showOverview(+m[1] - 1, false); openScene(+m[1] - 1); }
+else if (hash === "capas") showTab("capas");
+else { showOverview(0, false); setTour(!RM); }
+</script>
+</body>
+</html>
