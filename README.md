@@ -5,8 +5,8 @@
 <br>
 
 <a href="#instalacion"><img src="https://img.shields.io/badge/Python-3.11%2B-55D6F2?style=for-the-badge&logo=python&logoColor=55D6F2&labelColor=0C1220" alt="Python 3.11+"></a>
-<a href="#tests"><img src="https://img.shields.io/badge/tests-369%20en%20verde-7DDB94?style=for-the-badge&logo=pytest&logoColor=7DDB94&labelColor=0C1220" alt="369 tests en verde"></a>
-<a href="#tests"><img src="https://img.shields.io/badge/cobertura-98%25-7DDB94?style=for-the-badge&labelColor=0C1220" alt="Cobertura 98%"></a>
+<a href="#tests"><img src="https://img.shields.io/badge/tests-399%20en%20verde-7DDB94?style=for-the-badge&logo=pytest&logoColor=7DDB94&labelColor=0C1220" alt="399 tests en verde"></a>
+<a href="#tests"><img src="https://img.shields.io/badge/cobertura-99%25-7DDB94?style=for-the-badge&labelColor=0C1220" alt="Cobertura 99%"></a>
 <a href="#arquitectura"><img src="https://img.shields.io/badge/arquitectura-hexagonal-CF8EF5?style=for-the-badge&labelColor=0C1220" alt="Arquitectura hexagonal"></a>
 <a href="#equipo"><img src="https://img.shields.io/badge/Scrum-2%20sprints-F4C55B?style=for-the-badge&logo=jira&logoColor=F4C55B&labelColor=0C1220" alt="Scrum, 2 sprints"></a>
 
@@ -52,13 +52,13 @@ Cada paso tiene su propio color en la terminal, igual que en el esquema de arrib
 <td width="50%" valign="top">
 
 **Confirma antes de gastar**<br>
-Te enseña el primer resultado de Wikipedia y te pregunta si era eso. Si no, te ofrece otros cinco para elegir. Nada se envía a la IA hasta que dices que sí.
+Te enseña el primer resultado de Wikipedia y te pregunta si era eso. Si no, te ofrece hasta cinco más para elegir, o volver a escribir el tema. Nada se envía a la IA hasta que dices que sí.
 
 </td>
 <td width="50%" valign="top">
 
 **Amplía sin inventar**<br>
-La IA añade explicaciones y contexto, pero se le pide que respete los datos del artículo original: nombres, fechas y cifras no cambian.
+La IA añade explicaciones y contexto, pero se le pide expresamente que sea fiel al artículo original y que no invente datos.
 
 </td>
 </tr>
@@ -72,7 +72,7 @@ Sin internet, Wikipedia lenta o saturada, sin saldo en la IA… Cada caso tiene 
 <td valign="top">
 
 **Sigue aunque falte una pieza**<br>
-Si la IA no está disponible, Joselito no se cae: te avisa, sigue con la traducción y guarda el documento marcando lo que falta.
+Si la IA no está disponible, Joselito no se cae: te avisa, sigue con la traducción y guarda el documento marcando lo que falta. La traducción sí es imprescindible: si falla, te explica el motivo y termina.
 
 </td>
 </tr>
@@ -80,13 +80,13 @@ Si la IA no está disponible, Joselito no se cae: te avisa, sigue con la traducc
 <td valign="top">
 
 **Documentos listos para estudiar**<br>
-PDF con tipografía DejaVu incluida (tildes y eñes perfectas) o TXT plano. El resumen breve puede ir en su propio archivo.
+PDF con tipografía DejaVu incluida (tildes y eñes perfectas) o TXT plano. Si pides resumen breve, va en su propio archivo, con el formato que elijas.
 
 </td>
 <td valign="top">
 
 **Deja rastro de todo**<br>
-Cada ejecución escribe su propio registro en <code>logs/</code>, con fecha, nivel y un identificador, para poder seguir cualquier problema paso a paso.
+Cada ejecución escribe su propio registro en <code>logs/</code>, con fecha, nivel y un identificador, para poder seguir cualquier problema paso a paso. Si una clave de la IA aparece en un mensaje, se sustituye por <code>***</code> antes de escribirla.
 
 </td>
 </tr>
@@ -235,10 +235,11 @@ python cli.py --tema "Agujero negro" --idioma inglés
 
 | Variable en `.env` | Obligatoria | Qué hace |
 |---|:---:|---|
-| `DEEPSEEK_API_KEY` | Sí | Clave para enriquecer y resumir con IA |
+| `DEEPSEEK_API_KEY` | Sí | Clave para enriquecer y resumir con IA. Sin ella Joselito funciona, pero sin IA |
 | `GOOGLE_TRANSLATE_API_KEY` | Sí | Clave para traducir |
 | `DEEPSEEK_MODEL` | No | Modelo de IA (por defecto `deepseek-chat`) |
 | `DEEPSEEK_SUMMARIZER_MODEL` | No | Modelo solo para el resumen breve |
+| `DEEPSEEK_BASE_URL` | No | Dirección de la API de DeepSeek (por defecto `https://api.deepseek.com/v1`) |
 | `LOG_LEVEL` | No | Detalle del registro: `DEBUG`, `INFO` (por defecto), `WARNING`… |
 
 ¿No sabes si el programa lee tu clave de DeepSeek? Ejecuta `python diagnostico_env.py`: te lo dice sin mostrar la clave entera.
@@ -254,6 +255,9 @@ python cli.py --tema "Agujero negro" --idioma inglés
 Joselito sigue una **arquitectura hexagonal** (también llamada *puertos y adaptadores*).
 
 Piensa en los enchufes de casa: el núcleo del programa define la forma del enchufe (el **puerto**) y cada servicio externo es un aparato con su clavija (el **adaptador**). Cuando el equipo cambió de Hugging Face a DeepSeek, o de Deep Translate a Google Translate, solo hubo que cambiar el aparato: el núcleo no se tocó.
+
+> [!TIP]
+> En [docs/architecture.md](docs/architecture.md) está la arquitectura explicada paso a paso, con una animación del flujo completo. Y si abres [docs/flujo-interactivo.html](docs/flujo-interactivo.html) en el navegador (descárgalo y haz doble clic), puedes entrar en cada paso y ver quién habla con quién, qué sale en la terminal y qué pasa cuando algo falla.
 
 ```mermaid
 flowchart LR
@@ -314,7 +318,7 @@ flowchart LR
 ```text
 Joselito/
 ├── cli.py                     ← la terminal: preguntas, paneles y colores
-├── src/wiki_enrichment/
+├── src/
 │   ├── domain/                ← el corazón: modelos, puertos y errores propios
 │   ├── application/           ← los casos de uso (el orquestador)
 │   ├── infrastructure/        ← adaptadores: Wikipedia, DeepSeek, Google, PDF/TXT, logs
@@ -324,7 +328,11 @@ Joselito/
 │   ├── features/              ← historias de usuario en Gherkin
 │   ├── step_definitions/      ← los pasos que las comprueban
 │   └── helpers/               ← servicios falsos para no gastar APIs reales
-├── docs/architecture.md       ← la arquitectura, con más detalle
+├── docs/
+│   ├── architecture.md        ← la arquitectura, con más detalle
+│   ├── flujo-interactivo.html ← el flujo animado e interactivo (ábrelo en el navegador)
+│   ├── img/                   ← la animación del flujo
+│   └── assets/                ← las imágenes de este README
 ├── output/                    ← aquí aparecen tus PDF y TXT
 └── logs/                      ← un registro por ejecución
 ```
@@ -344,7 +352,8 @@ Joselito/
 | [Google Cloud Translation](https://cloud.google.com/translate) | Traducir al idioma elegido |
 | [fpdf2](https://py-pdf.github.io/fpdf2/) | Crear los PDF |
 | [python-dotenv](https://github.com/theskumar/python-dotenv) | Leer las claves del archivo `.env` |
-| [pytest](https://pytest.org) + [pytest-bdd](https://pytest-bdd.readthedocs.io) | Tests unitarios y escenarios en Gherkin |
+| [pytest](https://pytest.org) + [pytest-bdd](https://pytest-bdd.readthedocs.io) + [pytest-cov](https://pytest-cov.readthedocs.io) | Tests unitarios, escenarios en Gherkin y cobertura |
+| [pypdf](https://pypdf.readthedocs.io) | Leer los PDF generados en los tests para comprobar su contenido |
 
 </details>
 
@@ -354,7 +363,7 @@ Joselito/
 
 ## ▍Calidad y tests
 
-<img src="docs/assets/calidad.svg" width="100%" alt="369 tests en verde, 98 % de cobertura, 30 escenarios en Gherkin y 0 llamadas reales a APIs">
+<img src="docs/assets/calidad.svg" width="100%" alt="399 tests en verde, 99 % de cobertura, 39 escenarios en Gherkin y 0 llamadas reales a APIs">
 
 Los tests usan **servicios falsos** que imitan a Wikipedia, DeepSeek y Google: así se pueden pasar sin internet, sin gastar saldo y siempre con el mismo resultado.
 
@@ -362,7 +371,7 @@ Los tests usan **servicios falsos** que imitan a Wikipedia, DeepSeek y Google: a
 pytest
 ```
 
-`pytest` ya muestra la cobertura al final, línea por línea.
+`pytest` ya muestra la cobertura al final, línea por línea. La cobertura se mide sobre `src/` (`cli.py` no entra en el cálculo). Datos del 16/10/2026.
 
 <details>
 <summary><b>Historias de usuario cubiertas con Gherkin</b></summary>
@@ -374,9 +383,12 @@ Cada historia de usuario tiene su archivo `.feature`, escrito en lenguaje casi n
 |---|---|
 | `wikipedia_scraping.feature` | Encontrar un artículo, temas sin resultados, Wikipedia lenta o sin red |
 | `search_confirmation.feature` | Confirmar el primer resultado, elegir otro o volver a escribir el tema |
-| `export.feature` | Exportar a PDF o TXT, nombres de archivo no válidos, falta de permisos |
+| `enrichment.feature` | Enriquecer el artículo con IA |
+| `translation.feature` | Traducir el artículo, traductor lento o que falla |
+| `summary.feature` | Aceptar o rechazar el resumen breve, que falle, y que no se ofrezca sin texto de IA |
+| `export.feature` | Exportar a PDF o TXT, apartados vacíos, formato no admitido, nombres no válidos, falta de permisos |
 | `error_messages.feature` | Mensajes claros sin conexión, esperas de Wikipedia, IA lenta, Ctrl+C |
-| `logging.feature` | Registro de eventos con fecha y nivel, sin datos sensibles |
+| `logging.feature` | Registro de eventos con fecha y nivel, sin datos sensibles ni claves de DeepSeek |
 
 ```gherkin
 Scenario: Nothing is enriched until the user confirms

@@ -4,7 +4,9 @@ Joselito (paquete `wiki-enrichment`) busca un tema en Wikipedia, lo enriquece co
 IA (DeepSeek), lo traduce (Google Cloud Translation) y lo guarda en TXT o PDF.
 Este documento explica cómo está organizado el código y qué pasa en cada paso.
 
-> Revisado contra el código de la rama `fix/merge-solver` (commit `590a4f9`).
+> Revisado el 16/10/2026 contra el código de la rama `fix/update-docs`, que ya incluye
+> los cambios de `dev` hasta `3d1eb66`. Los datos de los tests se han comprobado
+> ejecutando `pytest`.
 
 ![Animación del flujo de una ejecución de Joselito](img/flujo-animado.svg)
 
@@ -113,7 +115,8 @@ falta la IA.
   `ExportError`.
 - **`logging_config`**: un log por ejecución en `logs/app_<run_id>.log`
   (`run_id` = 8 caracteres), rotación de 1 MB con 5 copias, hora UTC, nivel con
-  `LOG_LEVEL` (por defecto `INFO`).
+  `LOG_LEVEL` (por defecto `INFO`). Un filtro sustituye por `***` las claves de
+  Hugging Face (`hf_…`) y de DeepSeek (`sk-…`) antes de escribirlas.
 
 ## Modelos del dominio
 
@@ -145,8 +148,8 @@ en español.
 ## El orquestador
 
 `WikiEnrichmentOrchestrator` recibe las 5 piezas en el constructor y expone un
-método por paso. Casi todos escriben en el log (todos menos `translate_article`) y
-vuelven a lanzar los errores del dominio.
+método por paso. Todos escriben en el log lo que empiezan, lo que terminan y los
+errores, y vuelven a lanzar los errores del dominio para que el CLI decida qué hacer.
 
 | Método | Qué hace | Lo usa |
 |---|---|---|
@@ -185,7 +188,7 @@ Es lo que se ve en la animación. Entre paréntesis, dónde está en el código.
    se descarga. Se muestra el título y los 5 párrafos en un panel verde.
 7. **IA** (`enrich_article`). DeepSeek genera el texto enriquecido (panel magenta).
 8. **Traducción** (`translate_article`). Google traduce el **artículo original**
-   (panel verde). Luego `build_content()` junta original + IA + traducción en un
+   (panel verde) y el log apunta `Translating article: title=… target=…`. Luego `build_content()` junta original + IA + traducción en un
    `EnrichedContent`.
 9. **Resumen breve, opcional** (`BriefSummaryFlow`). Solo se ofrece si el paso 7
    dio texto. DeepSeek resume el texto de la IA en 3 o 4 frases (panel azul).
@@ -243,7 +246,15 @@ Gracias a los puertos, los casos de uso se prueban enchufando dobles en lugar de
 los servicios reales (`tests/helpers/fake_adapters.py` y `unittest.mock`). Los
 adaptadores de red se prueban sustituyendo `requests.get` / `requests.post` por
 respuestas simuladas, y el exportador escribe en carpetas temporales (`tmp_path`).
-Los escenarios en Gherkin están en `tests/features/` (8 archivos `.feature`).
+
+| Dato | Valor |
+|---|---|
+| Tests | 399, todos en verde |
+| Cobertura | 99 % de `src/` (falta 1 línea de `bootstrap.py`; `cli.py` no se mide) |
+| Escenarios Gherkin | 39, en 8 archivos `.feature` de `tests/features/` |
+| Llamadas reales a internet | 0 (los tests pasan igual con la red bloqueada) |
+
+Datos obtenidos con `pytest` el 16/10/2026 sobre la rama `fix/update-docs`.
 
 ## Observaciones sobre el código actual
 
@@ -255,14 +266,17 @@ Cosas que hemos visto al revisar el código y que conviene que el equipo conozca
 - **`execute()` y el CLI no traducen lo mismo.** `execute()` traduce el texto de la
   IA; el CLI traduce el artículo original. Además `execute()` exporta TXT y PDF a la
   vez, y el CLI solo el formato elegido.
-- **La traducción del CLI no deja rastro en el log.** `translate_article()` no
-  escribe ninguna línea (`translate_text()` sí).
-- **El filtro de secretos del log solo reconoce tokens de Hugging Face** (`hf_…`),
-  no las claves de DeepSeek (`sk-…`).
 - **Dependencias:** `cli.py` necesita `typer`, `rich` y `pyfiglet`. Están en
   `requirements.txt`, pero no en las dependencias de `pyproject.toml`.
 - El orquestador importa `LOGGER_NAME` desde infraestructura (ver «Dirección de las
   dependencias»).
+- **`diagnostico_env.py` está desactualizado:** intenta importar el paquete
+  `wiki_enrichment`, que ya no existe desde que se aplanó `src/`. Esa última parte
+  del diagnóstico siempre dirá que no lo encuentra.
+
+Ya corregido en `dev` (por eso no aparece arriba): la traducción del artículo ahora
+deja rastro en el log (`d3deda3`) y el log oculta también las claves de DeepSeek
+(`3d1eb66`).
 
 ## Cambios respecto a la versión anterior de este documento
 
@@ -277,3 +291,5 @@ Cosas que hemos visto al revisar el código y que conviene que el equipo conozca
   corresponde solo a `execute()`, que usan los tests.
 - Corregido: el CLI no habla «solo» con la capa de aplicación; también importa
   modelos y errores del dominio, `bootstrap` y la configuración del log.
+- Actualizado con los cambios de `dev` (log de la traducción y claves de DeepSeek
+  ocultas) y con los datos reales de los tests.

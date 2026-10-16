@@ -3,7 +3,7 @@
 Esta guía es para alguien que **nunca ha instalado un proyecto de programación**.
 Síguela **en orden**, sin saltarte pasos.
 
-Joselito es un programa que se usa escribiendo en una **terminal** (una ventana negra donde se escriben órdenes). Busca un tema en Wikipedia, lo mejora con inteligencia artificial y lo traduce.
+Joselito es un programa que se usa escribiendo en una **terminal** (una ventana negra donde se escriben órdenes). Busca un tema en Wikipedia, lo mejora con inteligencia artificial, lo traduce y lo guarda en PDF o TXT.
 
 ---
 
@@ -12,7 +12,7 @@ Joselito es un programa que se usa escribiendo en una **terminal** (una ventana 
 0. [Antes de empezar: cosas básicas](#0-antes-de-empezar-cosas-básicas)
 1. [Instalar los programas necesarios](#1-instalar-los-programas-necesarios-solo-una-vez)
 2. [Descargar e instalar el proyecto](#2-descargar-e-instalar-el-proyecto-solo-una-vez)
-3. [Poner tu clave de inteligencia artificial](#3-poner-tu-clave-de-inteligencia-artificial-solo-una-vez)
+3. [Poner tus claves: IA y traducción](#3-poner-tus-claves-solo-una-vez)
 4. [Usar Joselito](#4-usar-joselito)
 5. [Abrir el proyecto otro día](#5-abrir-el-proyecto-otro-día)
 6. [Abrirlo con Visual Studio Code](#6-abrirlo-con-visual-studio-code)
@@ -179,7 +179,7 @@ pip install -r requirements.txt
 pip install -e ".[test]"
 ```
 
-➡️ Ahora ve al [paso 3](#3-poner-tu-clave-de-inteligencia-artificial-solo-una-vez).
+➡️ Ahora ve al [paso 3](#3-poner-tus-claves-solo-una-vez).
 
 ---
 
@@ -214,7 +214,7 @@ pip install -e ".[test]"
 
 > En CMD, las líneas que empiezan por `::` son explicaciones (como `#` en las otras terminales).
 
-➡️ Ahora ve al [paso 3](#3-poner-tu-clave-de-inteligencia-artificial-solo-una-vez).
+➡️ Ahora ve al [paso 3](#3-poner-tus-claves-solo-una-vez).
 
 ---
 
@@ -247,22 +247,29 @@ pip install -r requirements.txt
 pip install -e ".[test]"
 ```
 
-➡️ Ahora ve al [paso 3](#3-poner-tu-clave-de-inteligencia-artificial-solo-una-vez).
+➡️ Ahora ve al [paso 3](#3-poner-tus-claves-solo-una-vez).
 
 ---
 
-## 3. Poner tu clave de inteligencia artificial (solo una vez)
+## 3. Poner tus claves (solo una vez)
 
-Joselito usa la inteligencia artificial de **DeepSeek**. Para usarla necesita una **clave** (API key), que es como una contraseña.
+Joselito usa dos servicios de internet y cada uno necesita su **clave** (API key), que es como una contraseña:
 
-### 3.1 Conseguir la clave
+| Servicio | Para qué | ¿Es obligatoria? |
+|---|---|---|
+| **DeepSeek** | Mejorar el texto con inteligencia artificial y hacer el resumen breve. | Sin ella, Joselito funciona, pero sin IA. |
+| **Google Cloud Translation** | Traducir al idioma que elijas. | **Sí.** Sin ella, Joselito se para al llegar a la traducción. |
+
+Las dos se guardan en el mismo archivo, `.env`.
+
+### 3.1 Conseguir la clave de DeepSeek
 
 1. Entra en https://platform.deepseek.com y crea una cuenta (o inicia sesión).
 2. Ve a **API keys** y pulsa **Create new API key**.
 3. **Copia** el texto que aparece (empieza por `sk-`).
    ⚠️ Solo se muestra una vez. Si lo pierdes, tendrás que crear otra.
 
-### 3.2 Guardar la clave en el proyecto
+### 3.2 Guardar la clave de DeepSeek en el proyecto
 
 Sigue en la **misma terminal** que antes (dentro de la carpeta `Joselito`).
 
@@ -282,7 +289,7 @@ notepad .env
 
 **3) Cambia esta línea:**
 ```
-DEEPSEEK_API_KEY=your_deepseek_key_here
+DEEPSEEK_API_KEY=your_key_here
 ```
 por tu clave real, **sin espacios ni comillas**. Por ejemplo:
 ```
@@ -291,7 +298,31 @@ DEEPSEEK_API_KEY=sk-AbCdEf123456
 
 **4) Guarda** con `Ctrl + S` y cierra el Bloc de notas.
 
-> 🔒 El archivo `.env` **nunca se sube a GitHub**. No compartas tu clave con nadie.
+### 3.3 Conseguir la clave de Google Translate
+
+1. Entra en https://console.cloud.google.com e inicia sesión con tu cuenta de Google.
+2. Arriba, en el selector de proyectos, crea un **proyecto nuevo** (por ejemplo, `Joselito`) y selecciónalo.
+3. Activa la API de traducción: entra en https://console.cloud.google.com/apis/library/translate.googleapis.com y pulsa **Habilitar**.
+   Google te pedirá asociar una **cuenta de facturación**. Los primeros 500.000 caracteres de cada mes se descuentan como crédito gratuito, así que para este proyecto lo normal es no pagar nada.
+4. Ve a **APIs y servicios → Credenciales → Crear credenciales → Clave de API** y **copia** la clave que aparece.
+
+### 3.4 Guardar la clave de Google en el proyecto
+
+**1) Abre otra vez el `.env`:**
+
+```
+notepad .env
+```
+
+**2) Cambia esta línea:**
+```
+GOOGLE_TRANSLATE_API_KEY=your_key_here
+```
+por tu clave real, **sin espacios ni comillas**.
+
+**3) Guarda** con `Ctrl + S` y cierra el Bloc de notas.
+
+> 🔒 El archivo `.env` **nunca se sube a GitHub**. No compartas tus claves con nadie.
 
 ---
 
@@ -483,7 +514,9 @@ python cli.py
 | `ModuleNotFoundError: No module named ...` | El entorno no está activado, o faltan librerías. | Comprueba que ves `(.venv)`. Si no, actívalo (paso 5). Si sí lo ves, repite la instalación de librerías (paso 2, último bloque). |
 | `fatal: destination path 'Joselito' already exists` | Ya descargaste el proyecto antes. | No hace falta volver a descargarlo. Entra con `cd Joselito` y sigue. |
 | `Repository not found` o pide contraseña al descargar | No tienes acceso al repositorio. | Pide al dueño del proyecto que te dé acceso en GitHub e inicia sesión con esa cuenta. |
-| Joselito dice que no ha podido enriquecer el texto con IA | Falla la clave o la conexión. | Revisa que `.env` tiene tu `DEEPSEEK_API_KEY` bien copiada (paso 3), que tienes internet y que tu cuenta de DeepSeek tiene saldo. Valida con `python prueba_deepseek.py`. |
+| Joselito dice que no ha podido enriquecer el texto con IA | Falla la clave o la conexión. | Revisa que `.env` tiene tu `DEEPSEEK_API_KEY` bien copiada (paso 3.2), que tienes internet y que tu cuenta de DeepSeek tiene saldo. Valida con `python prueba_deepseek.py`. |
+| `Google Translate is not configured` | Falta la clave de Google. | Pon `GOOGLE_TRANSLATE_API_KEY` en el `.env` (paso 3.4). |
+| `Google Translate returned HTTP 403 (permission denied…)` | Google rechaza la clave. | Revisa que la clave está bien copiada, que la API de traducción está **habilitada** en tu proyecto y que tiene cuenta de facturación (paso 3.3). |
 | En Git Bash no puedo pegar | `Ctrl + V` no funciona en Git Bash. | Usa `Shift + Insert` o clic derecho → *Paste*. |
 | No aparece `(.venv)` | El entorno no está activado. | Ejecuta el comando de activar de tu terminal (paso 5). |
 

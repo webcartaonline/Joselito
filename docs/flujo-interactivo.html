@@ -255,7 +255,7 @@ h1 { font: 600 clamp(26px, 3.4vw, 38px)/1.15 var(--sans); margin: 6px 0 0; text-
     </div>
     <h1>Arquitectura y flujo</h1>
     <p class="lede">Cómo funciona Joselito por dentro: qué pasa desde que escribes un tema hasta que se guarda el PDF, y cómo están separadas sus piezas. Haz clic en cualquier paso para ver su animación explicada.</p>
-    <div class="meta"><span>rama fix/merge-solver</span><span>commit 590a4f9</span><span>revisado el 16/10/2026</span></div>
+    <div class="meta"><span>rama fix/update-docs</span><span>incluye dev hasta 3d1eb66</span><span>revisado el 16/10/2026</span></div>
   </header>
 
   <nav class="tabs" role="tablist" aria-label="Vistas">
@@ -646,7 +646,7 @@ const STEPS = [
     lanes: [L_USER, L_CLI, L_ORQ, lane("TranslationAdapter", "infrastructure/translation.py", C.magenta), lane("Google Translate", "translation.googleapis.com", C.blue)],
     frames: [
       M(1, 0, "Traduciendo…", { cap: "Ves la barra de progreso.", term: [T.p("Traduciendo a inglés con Google Translate...")], ref: "cli.py · translate_article()" }),
-      M(1, 2, "translate_article(…)", { cap: "Pide traducir el artículo original, no el texto de la IA.", tec: "`translate_article()` envía `article.full_text`.", ref: "wiki_enrichment_orchestrator.py · translate_article()" }),
+      M(1, 2, "translate_article(…)", { cap: "Pide traducir el artículo original, no el texto de la IA.", tec: "`translate_article()` envía `article.full_text` y apunta en el log `Translating article: title=… target=inglés`.", ref: "wiki_enrichment_orchestrator.py · translate_article()" }),
       M(2, 3, "translate(texto, idioma)", { port: "Translator", cap: "El orquestador lo pide por el enchufe Translator." }),
       N(3, "'inglés' → 'en'", { cap: "Cambia el nombre del idioma por su código.", tec: "Lista fija: alemán `de`, catalán `ca`, español `es`, francés `fr`, inglés `en`, italiano `it`, japonés `ja`, portugués `pt` (con o sin tilde). Cualquier otro nombre se envía tal cual.", ref: "translation.py · LANGUAGE_CODES" }),
       N(3, "trozos de 5000", { cap: "Si el texto es largo, lo parte en trozos: primero por saltos de línea, luego por frases y luego por espacios. Al juntarlos queda exactamente igual.", tec: "`MAX_CHARS_PER_REQUEST = 5000`", ref: "translation.py · _chunk_text()" }),
@@ -1072,8 +1072,8 @@ const INFO = {
     rule: "Si mañana se cambia DeepSeek por otra IA, solo hay que tocar este archivo y escribir el adaptador nuevo." },
   logging: { c: C.magenta, t: "Infraestructura", file: "src/infrastructure/logging_config.py", h: "El log",
     p: "Prepara el diario de cada ejecución. Lo usan todas las capas, por eso está aparte.",
-    list: ["Un archivo por ejecución: `logs/app_<run_id>.log`.", "Rotación: 1 MB por archivo, hasta 5 copias.", "Hora en UTC y el `run_id` en cada línea.", "Nivel con la variable `LOG_LEVEL` (por defecto `INFO`)."],
-    rule: "Observación: el filtro que oculta secretos solo reconoce tokens de Hugging Face (`hf_…`), no las claves de DeepSeek (`sk-…`). El traductor sí borra su clave de los mensajes de error." },
+    list: ["Un archivo por ejecución: `logs/app_<run_id>.log`.", "Rotación: 1 MB por archivo, hasta 5 copias.", "Hora en UTC y el `run_id` en cada línea.", "Nivel con la variable `LOG_LEVEL` (por defecto `INFO`).", "Cada paso del orquestador, traducción incluida, deja su línea: empieza, termina o falla."],
+    rule: "Un filtro cambia por `***` las claves de Hugging Face (`hf_…`) y de DeepSeek (`sk-…`) antes de escribirlas. El traductor, además, borra su propia clave de los mensajes de error." },
   p_wiki: { c: C.green, t: "Puerto", file: "domain/ports.py · WikipediaSource", h: "WikipediaSource",
     p: "El enchufe para conseguir artículos.", pre: "fetch_article(topic) -> ArticleContent\nsearch(topic) -> list[SearchResult]\nfetch_article_by_title(title) -> ArticleContent",
     rule: "Programa real: `WikipediaSourceAdapter`. Tests: `FakeWikipediaSource`." },
