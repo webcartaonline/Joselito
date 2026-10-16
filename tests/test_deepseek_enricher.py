@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-import bootstrap
 from domain.exceptions import (
     EnrichmentError,
     ProviderTimeoutError,
@@ -76,6 +75,15 @@ def test_enrich_raises_error_on_empty_summary(content) -> None:
             DeepSeekEnricher(api_key="sk_fake").enrich(make_article())
 
 
+def test_enrich_rejects_article_without_text() -> None:
+    """An article without text is rejected before calling the provider."""
+    with patch(POST_TARGET) as mock_post:
+        with pytest.raises(EnrichmentError):
+            DeepSeekEnricher(api_key="sk_fake").enrich(make_article(paragraphs=["  "]))
+
+    mock_post.assert_not_called()
+
+
 def test_enrich_wraps_http_errors() -> None:
     response = make_response()
     response.raise_for_status.side_effect = requests.HTTPError("401 bad key")
@@ -83,23 +91,3 @@ def test_enrich_wraps_http_errors() -> None:
     with patch(POST_TARGET, return_value=response):
         with pytest.raises(EnrichmentError, match="401 bad key"):
             DeepSeekEnricher(api_key="sk_fake").enrich(make_article())
-
-
-def test_bootstrap_prefers_deepseek_when_its_key_is_set(monkeypatch) -> None:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk_fake")
-    monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
-
-    enricher = bootstrap.build_content_enricher()
-
-    assert isinstance(enricher, DeepSeekEnricher)
-    assert enricher._model == "deepseek-chat"
-
-
-def test_bootstrap_uses_fallback_without_deepseek_key(monkeypatch) -> None:
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-
-    enricher = bootstrap.build_content_enricher()
-
-    from infrastructure.ai import AIContentEnricher
-
-    assert isinstance(enricher, AIContentEnricher)

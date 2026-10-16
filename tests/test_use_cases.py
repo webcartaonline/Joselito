@@ -6,6 +6,7 @@ import pytest
 
 from tests.helpers.content_mocks import make_article, make_enriched
 from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.exceptions import ExportError, ResourceNotFoundError
 from domain.models import SearchResult
 from domain.models import BriefSummary
 from domain.ports import (
@@ -250,3 +251,37 @@ def test_search_articles_and_fetch_by_title_only_query_the_wikipedia_source() ->
     source.search.assert_called_once_with("Alboles")
     source.fetch_article_by_title.assert_called_once_with("Árbol")
     enricher.enrich.assert_not_called()
+
+
+def test_fetch_article_by_title_failure_propagates_the_error() -> None:
+    """A failing download of the chosen article raises without returning text."""
+
+    source = create_autospec(WikipediaSource, instance=True)
+    source.fetch_article_by_title.side_effect = ResourceNotFoundError("missing")
+    orchestrator = WikiEnrichmentOrchestrator(
+        source,
+        create_autospec(ContentEnricher, instance=True),
+        create_autospec(Translator, instance=True),
+        create_autospec(DocumentExporter, instance=True),
+        create_autospec(ContentSummarizer, instance=True),
+    )
+
+    with pytest.raises(ResourceNotFoundError):
+        orchestrator.fetch_article_by_title("Árbol")
+
+    source.fetch_article_by_title.assert_called_once_with("Árbol")
+
+
+def test_export_summary_failure_propagates_the_error() -> None:
+    """A failing summary export raises the exporter error to the caller."""
+
+    orchestrator, exporter = make_orchestrator_with_exporter()
+    exporter.export_summary_txt.side_effect = ExportError("no space")
+    summary = BriefSummary("Python", "Brief.", "Resumen.")
+
+    with pytest.raises(ExportError):
+        orchestrator.export_summary(summary, "TXT", "output/notes_summary.txt")
+
+    exporter.export_summary_txt.assert_called_once_with(
+        summary, "output/notes_summary.txt"
+    )

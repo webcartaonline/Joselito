@@ -38,3 +38,15 @@ def test_load_local_env_file_does_not_override_existing_values(
     bootstrap._load_local_env_file()
 
     assert bootstrap.os.getenv("GOOGLE_TRANSLATE_API_KEY") == "already-set"
+
+
+def test_load_local_env_file_without_env_file_does_nothing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    module_path = _write_bootstrap_at(tmp_path)
+    monkeypatch.setattr(bootstrap, "__file__", str(module_path))
+    monkeypatch.delenv("GOOGLE_TRANSLATE_API_KEY", raising=False)
+
+    bootstrap._load_local_env_file()
+
+    assert bootstrap.os.getenv("GOOGLE_TRANSLATE_API_KEY") is None

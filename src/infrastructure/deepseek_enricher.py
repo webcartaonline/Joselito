@@ -95,8 +95,6 @@ class DeepSeekEnricher:
             ).strip()
         except (requests.Timeout, TimeoutError) as error:
             raise ProviderTimeoutError("DeepSeek request timed out.") from error
-        except EnrichmentError:
-            raise
         except Exception as error:
             raise EnrichmentError(f"AI enrichment failed: {error}") from error
 

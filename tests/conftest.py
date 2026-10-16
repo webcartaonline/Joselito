@@ -1,6 +1,7 @@
 """Shared pytest fixtures for contract-level test doubles."""
 
 from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -93,3 +94,26 @@ def fake_translator() -> FakeTranslator:
 def fake_exporter() -> FakeDocumentExporter:
     """Return a fake exporter recording without filesystem writes."""
     return FakeDocumentExporter()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _remove_test_generated_logs() -> Iterator[None]:
+    """Delete repo log files created while the test session runs.
+
+    Some tests exercise the real log/error paths (``logs/`` and
+    ``output/ultimo_error_ia.txt``). Snapshot both locations before the
+    session and remove only the files the tests added, so pre-existing
+    user files are never touched.
+    """
+
+    logs_dir = Path("logs")
+    error_file = Path("output") / "ultimo_error_ia.txt"
+    known_logs = set(logs_dir.iterdir()) if logs_dir.is_dir() else set()
+    had_error_file = error_file.exists()
+    yield
+    if logs_dir.is_dir():
+        for path in logs_dir.iterdir():
+            if path not in known_logs and path.is_file():
+                path.unlink(missing_ok=True)
+    if error_file.exists() and not had_error_file:
+        error_file.unlink(missing_ok=True)

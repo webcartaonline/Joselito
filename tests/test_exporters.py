@@ -12,13 +12,17 @@ from infrastructure.exporters import (
     EMPTY_SECTION_TEXT,
     ENRICHED_HEADING,
     ORIGINAL_HEADING,
+    SUMMARY_HEADING,
     TEXT_ENCODING,
     TRANSLATED_HEADING,
+    TRANSLATED_SUMMARY_HEADING,
     DocumentExporterAdapter,
 )
+from domain.models import BriefSummary
 
 ARTICLE = make_article("Agujero negro", ["Primer párrafo.", "Segundo párrafo."])
 CONTENT = make_enriched(ARTICLE, "Texto ampliado por la IA.", "Black hole text.")
+SUMMARY = BriefSummary("Agujero negro", "Resumen breve.", "Brief summary.")
 
 
 def read(path) -> str:
@@ -173,3 +177,84 @@ def test_export_pdf_raises_export_error_when_the_pdf_cannot_be_built(
 
     with pytest.raises(ExportError):
         DocumentExporterAdapter().export_pdf(CONTENT, str(tmp_path / "apuntes.pdf"))
+
+
+def test_export_summary_txt_saves_title_and_both_summaries(tmp_path) -> None:
+    """The summary file contains the title and the two summary sections."""
+
+    path = tmp_path / "apuntes_summary.txt"
+
+    DocumentExporterAdapter().export_summary_txt(SUMMARY, str(path))
+
+    text = read(path)
+    assert text.startswith("Agujero negro\n=============\n")
+    positions = [text.index(part) for part in (
+        SUMMARY_HEADING, "Resumen breve.",
+        TRANSLATED_SUMMARY_HEADING, "Brief summary.",
+    )]
+    assert positions == sorted(positions)
+
+
+def test_export_summary_txt_marks_missing_translation(tmp_path) -> None:
+    """An empty translated summary is marked as not available."""
+
+    path = tmp_path / "apuntes_summary.txt"
+
+    DocumentExporterAdapter().export_summary_txt(
+        BriefSummary("Agujero negro", "Resumen breve.", ""), str(path)
+    )
+
+    assert read(path).count(EMPTY_SECTION_TEXT) == 1
+
+
+def test_export_summary_txt_raises_export_error_when_it_cannot_write(tmp_path) -> None:
+    """A summary path that cannot be written becomes a domain ExportError."""
+
+    folder_with_the_same_name = tmp_path / "apuntes_summary.txt"
+    folder_with_the_same_name.mkdir()
+
+    with pytest.raises(ExportError):
+        DocumentExporterAdapter().export_summary_txt(
+            SUMMARY, str(folder_with_the_same_name)
+        )
+
+
+def test_export_summary_pdf_saves_title_and_both_summaries(tmp_path) -> None:
+    """The summary PDF opens and contains the title and both summaries."""
+
+    path = tmp_path / "apuntes_summary.pdf"
+
+    DocumentExporterAdapter().export_summary_pdf(SUMMARY, str(path))
+
+    text, _ = read_pdf(path)
+    positions = [text.index(part) for part in (
+        "Agujero negro",
+        SUMMARY_HEADING, "Resumen breve.",
+        TRANSLATED_SUMMARY_HEADING, "Brief summary.",
+    )]
+    assert positions == sorted(positions)
+
+
+def test_export_summary_pdf_marks_missing_translation(tmp_path) -> None:
+    """An empty translated summary is marked as not available in the PDF."""
+
+    path = tmp_path / "apuntes_summary.pdf"
+
+    DocumentExporterAdapter().export_summary_pdf(
+        BriefSummary("Agujero negro", "Resumen breve.", ""), str(path)
+    )
+
+    text, _ = read_pdf(path)
+    assert text.count(EMPTY_SECTION_TEXT) == 1
+
+
+def test_export_summary_pdf_raises_export_error_when_it_cannot_write(tmp_path) -> None:
+    """A summary PDF path that cannot be written becomes a domain ExportError."""
+
+    folder_with_the_same_name = tmp_path / "apuntes_summary.pdf"
+    folder_with_the_same_name.mkdir()
+
+    with pytest.raises(ExportError):
+        DocumentExporterAdapter().export_summary_pdf(
+            SUMMARY, str(folder_with_the_same_name)
+        )

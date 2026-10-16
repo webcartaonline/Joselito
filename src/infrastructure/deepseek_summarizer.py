@@ -80,8 +80,6 @@ class DeepSeekSummarizer:
             ).strip()
         except (requests.Timeout, TimeoutError) as error:
             raise ProviderTimeoutError("DeepSeek request timed out.") from error
-        except SummarizationError:
-            raise
         except Exception as error:
             raise SummarizationError(f"AI summarization failed: {error}") from error
 

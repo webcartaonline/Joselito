@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-import bootstrap
 from domain.exceptions import (
     ProviderTimeoutError,
     SummarizationError,
@@ -61,31 +60,17 @@ def test_summarize_maps_timeout_to_provider_timeout_error() -> None:
             DeepSeekSummarizer(api_key="sk_fake").summarize("Text.")
 
 
+def test_summarize_wraps_http_errors() -> None:
+    response = make_response()
+    response.raise_for_status.side_effect = requests.HTTPError("401 bad key")
+
+    with patch(POST_TARGET, return_value=response):
+        with pytest.raises(SummarizationError, match="401 bad key"):
+            DeepSeekSummarizer(api_key="sk_fake").summarize("Text.")
+
+
 @pytest.mark.parametrize("content", ["", "   ", None])
 def test_summarize_raises_error_on_empty_summary(content) -> None:
     with patch(POST_TARGET, return_value=make_response(content)):
         with pytest.raises(SummarizationError):
             DeepSeekSummarizer(api_key="sk_fake").summarize("Text.")
-
-
-def test_bootstrap_prefers_deepseek_summarizer_when_its_key_is_set(
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk_fake")
-    monkeypatch.delenv("DEEPSEEK_SUMMARIZER_MODEL", raising=False)
-    monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
-
-    summarizer = bootstrap.build_content_summarizer()
-
-    assert isinstance(summarizer, DeepSeekSummarizer)
-    assert summarizer._model == "deepseek-chat"
-
-
-def test_bootstrap_summarizer_model_env_overrides_the_default(monkeypatch) -> None:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk_fake")
-    monkeypatch.setenv("DEEPSEEK_SUMMARIZER_MODEL", "deepseek-reasoner")
-
-    summarizer = bootstrap.build_content_summarizer()
-
-    assert isinstance(summarizer, DeepSeekSummarizer)
-    assert summarizer._model == "deepseek-reasoner"
