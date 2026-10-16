@@ -29,6 +29,7 @@ scenarios("../features/logging.feature")
 
 LOG_FILE = Path("logs") / "app.log"
 HUGGING_FACE_TOKEN = "hf_abcdefghijklmnop"
+DEEPSEEK_API_KEY = "sk-abcdefghijklmnop"
 TARGET_LANG = "fr"
 EXPORT_BASE = "output/article"
 LOG_LINE = re.compile(
@@ -88,6 +89,14 @@ def source_fails_with_token(context: dict) -> None:
     )
 
 
+@given("the Wikipedia source fails with a DeepSeek API key")
+def source_fails_with_deepseek_key(context: dict) -> None:
+    """Configure the fake source to fail with a message carrying a DeepSeek key."""
+    context["source"] = FakeWikipediaSource(
+        failure=ResourceNotFoundError(f"auth failed for {DEEPSEEK_API_KEY}")
+    )
+
+
 @when(
     parsers.parse('I run a research session for the topic "{topic}"'),
     target_fixture="context",
@@ -137,4 +146,11 @@ def log_records_an_error(context: dict) -> None:
 def log_does_not_contain_token(context: dict) -> None:
     content = read_log(context)
     assert HUGGING_FACE_TOKEN not in content
+    assert "***" in content
+
+
+@then("the log does not contain the DeepSeek key")
+def log_does_not_contain_deepseek_key(context: dict) -> None:
+    content = read_log(context)
+    assert DEEPSEEK_API_KEY not in content
     assert "***" in content

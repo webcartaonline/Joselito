@@ -28,10 +28,13 @@ from infrastructure.logging_config import (
 LOG_FILE = Path("logs") / "app.log"
 
 HUGGING_FACE_TOKEN = "hf_abcdefghijklmnop"
+DEEPSEEK_API_KEY = "sk-abcdefghijklmnop"
 
 SECRET_SAMPLES = (
     (f"Loading model with token {HUGGING_FACE_TOKEN}", HUGGING_FACE_TOKEN),
     (f"Configuration HF_TOKEN={HUGGING_FACE_TOKEN}", HUGGING_FACE_TOKEN),
+    (f"Calling DeepSeek with key {DEEPSEEK_API_KEY}", DEEPSEEK_API_KEY),
+    (f"Authorization: Bearer {DEEPSEEK_API_KEY}", DEEPSEEK_API_KEY),
 )
 
 
@@ -164,9 +167,12 @@ def test_redact_sensitive_data_keeps_normal_text() -> None:
     assert redact_sensitive_data("App started") == "App started"
 
 
-def test_redact_sensitive_data_ignores_other_keys() -> None:
-    """Only the Hugging Face token is redacted."""
-    assert redact_sensitive_data("key sk-abcdefghijklmnop") == "key sk-abcdefghijklmnop"
+def test_redact_sensitive_data_removes_deepseek_key() -> None:
+    """DeepSeek API keys are redacted as well."""
+    redacted = redact_sensitive_data(f"key {DEEPSEEK_API_KEY}")
+
+    assert DEEPSEEK_API_KEY not in redacted
+    assert REDACTION_PLACEHOLDER in redacted
 
 
 def test_sensitive_data_filter_redacts_record_message() -> None:

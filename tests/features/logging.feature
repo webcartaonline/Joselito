@@ -25,3 +25,9 @@ Feature: Application logging (US 9.1)
     And the Wikipedia source fails with a Hugging Face token
     When I run a research session for the topic "Python"
     Then the log does not contain the token
+
+  Scenario: DeepSeek keys are not logged
+    Given the logging is configured in a temporary folder
+    And the Wikipedia source fails with a DeepSeek API key
+    When I run a research session for the topic "Python"
+    Then the log does not contain the DeepSeek key

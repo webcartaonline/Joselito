@@ -30,6 +30,8 @@ _current_run_id: ContextVar[str] = ContextVar(RUN_ID_FIELD, default=DEFAULT_RUN_
 
 REDACTION_PLACEHOLDER = "***"
 HUGGING_FACE_TOKEN_PATTERN = re.compile(r"hf_[A-Za-z0-9]{8,}")
+DEEPSEEK_API_KEY_PATTERN = re.compile(r"sk-[A-Za-z0-9]{8,}")
+SENSITIVE_PATTERNS = (HUGGING_FACE_TOKEN_PATTERN, DEEPSEEK_API_KEY_PATTERN)
 
 
 class UtcFormatter(logging.Formatter):
@@ -115,21 +117,23 @@ class RunIdFilter(logging.Filter):
 
 
 def redact_sensitive_data(text: str) -> str:
-    """Replace the Hugging Face token found in a text with a placeholder.
+    """Replace any known provider credential in a text with a placeholder.
 
     Args:
-        text: Text that may contain the Hugging Face token.
+        text: Text that may contain provider credentials.
 
     Returns:
-        The text with every detected token replaced by
+        The text with every detected credential replaced by
         ``REDACTION_PLACEHOLDER``.
     """
 
-    return HUGGING_FACE_TOKEN_PATTERN.sub(REDACTION_PLACEHOLDER, text)
+    for pattern in SENSITIVE_PATTERNS:
+        text = pattern.sub(REDACTION_PLACEHOLDER, text)
+    return text
 
 
 class SensitiveDataFilter(logging.Filter):
-    """Filter that removes the Hugging Face token from every log record."""
+    """Filter that removes provider credentials from every log record."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Redact the record message and let it through.
@@ -171,7 +175,7 @@ def build_file_handler(path: Path) -> RotatingFileHandler:
 
     Returns:
         A handler writing UTF-8 lines with UTC timestamps, the run
-        identifier and the Hugging Face token removed.
+        identifier and provider credentials removed.
     """
 
     path.parent.mkdir(parents=True, exist_ok=True)
