@@ -413,25 +413,28 @@ Proyecto del bootcamp de desarrollo con Python, hecho en **dos sprints de Scrum*
 <a href="https://github.com/El-Jesule"><img src="https://github.com/El-Jesule.png?size=200" width="96" alt="Jesús"></a><br>
 <b>Jesús</b><br>
 Scrum Master<br>Backend<br>
-<a href="https://github.com/El-Jesule"><code>@El-Jesule</code></a>
+<a href="https://github.com/El-Jesule"><code>GitHub</code></a>
+<a href="https://www.linkedin.com/in/jesús-gon-góm/"><code>LinkedIn</code></a>
 </td>
 <td align="center" width="25%">
 <a href="https://github.com/kvadrakola"><img src="https://github.com/kvadrakola.png?size=200" width="96" alt="Konsta"></a><br>
 <b>Konsta</b><br>
 Product Owner<br>Backend<br>
-<a href="https://github.com/kvadrakola"><code>@kvadrakola</code></a>
+<a href="https://github.com/kvadrakola"><code>GitHub</code></a>
 </td>
 <td align="center" width="25%">
 <a href="https://github.com/mjrr39sevilla"><img src="https://github.com/mjrr39sevilla.png?size=200" width="96" alt="María"></a><br>
 <b>María</b><br>
 Backend<br><br>
-<a href="https://github.com/mjrr39sevilla"><code>@mjrr39sevilla</code></a>
+<a href="https://github.com/mjrr39sevilla"><code>GitHub</code></a>
+<a href="https://www.linkedin.com/in/maria-jose-rodriguez-ramos"><code>LinkedIn</code></a>
 </td>
 <td align="center" width="25%">
 <a href="https://github.com/webcartaonline"><img src="https://github.com/webcartaonline.png?size=200" width="96" alt="Camilo"></a><br>
 <b>Camilo</b><br>
 Backend<br><br>
-<a href="https://github.com/webcartaonline"><code>@webcartaonline</code></a>
+<a href="https://github.com/webcartaonline"><code>GitHub</code></a>
+<a href="www.linkedin.com/in/camilo-piamba"><code>LinkedIn</code></a>
 </td>
 </tr>
 </table>
