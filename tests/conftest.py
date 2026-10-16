@@ -103,17 +103,35 @@ def _remove_test_generated_logs() -> Iterator[None]:
     Some tests exercise the real log/error paths (``logs/`` and
     ``output/ultimo_error_ia.txt``). Snapshot both locations before the
     session and remove only the files the tests added, so pre-existing
-    user files are never touched.
+    user files are never touched. Logging handlers are closed first so
+    locked files can be removed on Windows.
     """
+
+    import logging
+
+    from infrastructure.logging_config import LOGGER_NAME
 
     logs_dir = Path("logs")
     error_file = Path("output") / "ultimo_error_ia.txt"
     known_logs = set(logs_dir.iterdir()) if logs_dir.is_dir() else set()
     had_error_file = error_file.exists()
     yield
+    logger = logging.getLogger(LOGGER_NAME)
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        try:
+            handler.close()
+        except OSError:
+            pass
     if logs_dir.is_dir():
         for path in logs_dir.iterdir():
             if path not in known_logs and path.is_file():
-                path.unlink(missing_ok=True)
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
     if error_file.exists() and not had_error_file:
-        error_file.unlink(missing_ok=True)
+        try:
+            error_file.unlink()
+        except OSError:
+            pass

@@ -12,8 +12,9 @@ clients, AI SDKs, translation libraries, and document-generation libraries.
   all collaborators through its constructor and imports no concrete adapters.
 - **Infrastructure** contains provider-specific adapter implementations. The
   document exporter writes real TXT and PDF files (PDFs use `fpdf2` with the
-  bundled DejaVu font in `infrastructure/fonts/`); the AI and translation
-  adapters are still placeholders.
+  bundled DejaVu font in `infrastructure/fonts/`); the AI enricher and
+  summarizer call the DeepSeek chat API, and the translator calls the Google
+  Cloud Translation API.
 - **Presentation** is the CLI (`cli.py`) or any other user-facing entry point.
   It obtains a fully wired orchestrator from
   `wiki_enrichment.bootstrap.build_orchestrator`, which is the only module that
