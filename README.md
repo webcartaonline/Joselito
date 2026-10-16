@@ -6,7 +6,7 @@
 
 <a href="#instalacion"><img src="https://img.shields.io/badge/Python-3.11%2B-55D6F2?style=for-the-badge&logo=python&logoColor=55D6F2&labelColor=0C1220" alt="Python 3.11+"></a>
 <a href="#tests"><img src="https://img.shields.io/badge/tests-399%20en%20verde-7DDB94?style=for-the-badge&logo=pytest&logoColor=7DDB94&labelColor=0C1220" alt="399 tests en verde"></a>
-<a href="#tests"><img src="https://img.shields.io/badge/cobertura-99%25-7DDB94?style=for-the-badge&labelColor=0C1220" alt="Cobertura 99%"></a>
+<a href="#tests"><img src="https://img.shields.io/badge/cobertura-100%25-7DDB94?style=for-the-badge&labelColor=0C1220" alt="Cobertura 100%"></a>
 <a href="#arquitectura"><img src="https://img.shields.io/badge/arquitectura-hexagonal-CF8EF5?style=for-the-badge&labelColor=0C1220" alt="Arquitectura hexagonal"></a>
 <a href="#equipo"><img src="https://img.shields.io/badge/Scrum-2%20sprints-F4C55B?style=for-the-badge&logo=jira&logoColor=F4C55B&labelColor=0C1220" alt="Scrum, 2 sprints"></a>
 
@@ -363,7 +363,7 @@ Joselito/
 
 ## ▍Calidad y tests
 
-<img src="docs/assets/calidad.svg" width="100%" alt="399 tests en verde, 99 % de cobertura, 39 escenarios en Gherkin y 0 llamadas reales a APIs">
+<img src="docs/assets/calidad.svg" width="100%" alt="399 tests en verde, 100 % de cobertura, 39 escenarios en Gherkin y 0 llamadas reales a APIs">
 
 Los tests usan **servicios falsos** que imitan a Wikipedia, DeepSeek y Google: así se pueden pasar sin internet, sin gastar saldo y siempre con el mismo resultado.
 
