@@ -1,8 +1,13 @@
 """In-memory fakes implementing the domain ports without I/O."""
 
 from tests.helpers.content_mocks import make_article
-from wiki_enrichment.domain.exceptions import WikiEnrichmentError
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent, SearchResult
+from domain.exceptions import WikiEnrichmentError
+from domain.models import (
+    ArticleContent,
+    BriefSummary,
+    EnrichedContent,
+    SearchResult,
+)
 
 FAKE_SEARCH_SUMMARY = "A short summary from Wikipedia."
 
@@ -93,6 +98,8 @@ class FakeDocumentExporter:
         self._failure = failure
         self.saved_txt: list[tuple[EnrichedContent, str]] = []
         self.saved_pdf: list[tuple[EnrichedContent, str]] = []
+        self.saved_summary_txt: list[tuple[BriefSummary, str]] = []
+        self.saved_summary_pdf: list[tuple[BriefSummary, str]] = []
 
     def export_txt(self, content: EnrichedContent, path: str) -> None:
         """Record a plain-text export."""
@@ -105,3 +112,15 @@ class FakeDocumentExporter:
         if self._failure is not None:
             raise self._failure
         self.saved_pdf.append((content, path))
+
+    def export_summary_txt(self, summary: BriefSummary, path: str) -> None:
+        """Record a plain-text summary export."""
+        if self._failure is not None:
+            raise self._failure
+        self.saved_summary_txt.append((summary, path))
+
+    def export_summary_pdf(self, summary: BriefSummary, path: str) -> None:
+        """Record a PDF summary export."""
+        if self._failure is not None:
+            raise self._failure
+        self.saved_summary_pdf.append((summary, path))

@@ -19,7 +19,7 @@ from tests.helpers.wikipedia_mocks import (
     build_search_payload,
     default_article_html,
 )
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from domain.models import ArticleContent, EnrichedContent
 
 
 @pytest.fixture

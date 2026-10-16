@@ -6,7 +6,7 @@ import time
 
 import requests
 
-from wiki_enrichment.domain.exceptions import ProviderTimeoutError, WikiEnrichmentError
+from domain.exceptions import ProviderTimeoutError, WikiEnrichmentError
 
 TRANSLATE_URL = "https://translation.googleapis.com/language/translate/v2"
 API_KEY_ENV_VAR = "GOOGLE_TRANSLATE_API_KEY"

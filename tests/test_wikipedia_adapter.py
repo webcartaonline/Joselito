@@ -18,18 +18,18 @@ from tests.helpers.wikipedia_mocks import (
     make_response,
     make_search_response,
 )
-from wiki_enrichment.domain.exceptions import (
+from domain.exceptions import (
     ProviderTimeoutError,
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.infrastructure.logging_config import (
+from infrastructure.logging_config import (
     DEFAULT_RUN_ID,
     LOGGER_NAME,
     configure_logging,
     set_run_id,
 )
-from wiki_enrichment.infrastructure.wikipedia import (
+from infrastructure.wikipedia import (
     HEADERS,
     MAX_PARAGRAPHS,
     REQUEST_TIMEOUT_SECONDS,

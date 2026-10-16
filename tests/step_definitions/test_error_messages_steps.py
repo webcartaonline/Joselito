@@ -25,13 +25,13 @@ from tests.helpers.fake_adapters import (
     FakeTranslator,
     FakeWikipediaSource,
 )
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.ports import ContentSummarizer
-from wiki_enrichment.infrastructure.deepseek_enricher import DeepSeekEnricher
-from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.ports import ContentSummarizer
+from infrastructure.deepseek_enricher import DeepSeekEnricher
+from infrastructure.wikipedia import WikipediaSourceAdapter
 
-REQUESTS_GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
-DEEPSEEK_POST = "wiki_enrichment.infrastructure.deepseek_enricher.requests.post"
+REQUESTS_GET = "infrastructure.wikipedia.requests.get"
+DEEPSEEK_POST = "infrastructure.deepseek_enricher.requests.post"
 LANGUAGE = "inglés"
 CONFIRM = "Y\n"  # Answer to "¿Era esto lo que buscabas?"
 NO_EXPORT = "N\n"

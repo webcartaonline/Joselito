@@ -7,8 +7,8 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 from fpdf.errors import FPDFException
 
-from wiki_enrichment.domain.exceptions import ExportError
-from wiki_enrichment.domain.models import BriefSummary, EnrichedContent
+from domain.exceptions import ExportError
+from domain.models import BriefSummary, EnrichedContent
 
 ORIGINAL_HEADING = "Contenido original (Wikipedia)"
 ENRICHED_HEADING = "Contenido enriquecido (IA)"

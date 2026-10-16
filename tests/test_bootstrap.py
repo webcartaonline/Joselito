@@ -3,15 +3,15 @@
 import pytest
 
 from tests.helpers.content_mocks import make_article
-from wiki_enrichment import bootstrap
-from wiki_enrichment.domain.exceptions import EnrichmentError, SummarizationError
-from wiki_enrichment.infrastructure.ai import (
+import bootstrap
+from domain.exceptions import EnrichmentError, SummarizationError
+from infrastructure.ai import (
     NO_PROVIDER_REASON,
     AIContentEnricher,
     AIContentSummarizer,
 )
-from wiki_enrichment.infrastructure.deepseek_enricher import DeepSeekEnricher
-from wiki_enrichment.infrastructure.deepseek_summarizer import DeepSeekSummarizer
+from infrastructure.deepseek_enricher import DeepSeekEnricher
+from infrastructure.deepseek_summarizer import DeepSeekSummarizer
 
 
 def test_uses_deepseek_with_the_default_model_when_there_is_a_key(

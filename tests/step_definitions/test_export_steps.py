@@ -12,10 +12,10 @@ from tests.helpers.fake_adapters import (
     FakeTranslator,
     FakeWikipediaSource,
 )
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.exceptions import ExportError
-from wiki_enrichment.domain.ports import ContentSummarizer
-from wiki_enrichment.infrastructure.exporters import (
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.exceptions import ExportError
+from domain.ports import ContentSummarizer
+from infrastructure.exporters import (
     EMPTY_SECTION_TEXT,
     ENRICHED_HEADING,
     ORIGINAL_HEADING,

@@ -2,8 +2,8 @@
 
 import pytest
 
-from wiki_enrichment.domain.exceptions import SummarizationError
-from wiki_enrichment.infrastructure.ai import NO_PROVIDER_REASON, AIContentSummarizer
+from domain.exceptions import SummarizationError
+from infrastructure.ai import NO_PROVIDER_REASON, AIContentSummarizer
 
 
 def test_summarizer_fails_with_the_default_reason() -> None:

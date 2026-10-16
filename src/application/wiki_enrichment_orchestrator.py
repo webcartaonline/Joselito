@@ -3,22 +3,23 @@
 import logging
 from pathlib import Path
 
-from wiki_enrichment.domain.exceptions import WikiEnrichmentError
-from wiki_enrichment.domain.models import (
+from domain.exceptions import WikiEnrichmentError
+from domain.models import (
     ArticleContent,
     BriefSummary,
     EnrichedContent,
     SearchResult,
 )
-from wiki_enrichment.domain.ports import (
+from domain.ports import (
     ContentEnricher,
     ContentSummarizer,
     DocumentExporter,
     Translator,
     WikipediaSource,
 )
+from infrastructure.logging_config import LOGGER_NAME
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"{LOGGER_NAME}.{__name__}")
 
 
 class WikiEnrichmentOrchestrator:
@@ -162,14 +163,21 @@ class WikiEnrichmentOrchestrator:
     def summarize(self, content: EnrichedContent, target_lang: str) -> BriefSummary:
         """Generate a brief summary of the enriched text without translating it."""
 
-        text = self._content_summarizer.summarize(content.ai_summary)
+        title = content.original_article.title
+        logger.info("Summarizing text: title=%s target=%s", title, target_lang)
+        try:
+            text = self._content_summarizer.summarize(content.ai_summary)
+        except WikiEnrichmentError:
+            logger.error("Summarization failed: title=%s", title, exc_info=True)
+            raise
+        logger.debug("Text summarized: title=%s characters=%d", title, len(text))
         return BriefSummary(
-            title=content.original_article.title,
+            title=title,
             text=text,
         )
 
     def export_summary(
-            self, summary: BriefSummary, export_format: str, path: str
+        self, summary: BriefSummary, export_format: str, path: str
     ) -> None:
         """Export the brief summary only in the format chosen by the user.
 
@@ -182,8 +190,21 @@ class WikiEnrichmentOrchestrator:
             "PDF": self._document_exporter.export_summary_pdf,
         }
         if export_format not in exporters:
+            logger.error("Unsupported summary export format: %s", export_format)
             raise ValueError(f"Unsupported export format: {export_format}")
-        exporters[export_format](summary, path)
+        file_name = Path(path).name
+        logger.info("Exporting summary: format=%s file=%s", export_format, file_name)
+        try:
+            exporters[export_format](summary, path)
+        except WikiEnrichmentError:
+            logger.error(
+                "Summary export failed: format=%s file=%s",
+                export_format,
+                file_name,
+                exc_info=True,
+            )
+            raise
+        logger.debug("Summary exported: file=%s", file_name)
 
     def execute(
         self, topic: str, target_lang: str, export_path: str

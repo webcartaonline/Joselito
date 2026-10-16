@@ -6,9 +6,9 @@ from pypdf import PdfReader
 
 from tests.helpers.content_mocks import make_article, make_enriched
 from tests.helpers.document_readers import read_pdf
-from wiki_enrichment.domain.exceptions import ExportError
-from wiki_enrichment.infrastructure import exporters
-from wiki_enrichment.infrastructure.exporters import (
+from domain.exceptions import ExportError
+from infrastructure import exporters
+from infrastructure.exporters import (
     EMPTY_SECTION_TEXT,
     ENRICHED_HEADING,
     ORIGINAL_HEADING,

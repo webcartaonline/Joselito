@@ -1,5 +1,7 @@
 """Tests for the brief summary flow of the command-line interface."""
 
+import logging
+from pathlib import Path
 from unittest.mock import create_autospec, patch
 
 import pytest
@@ -7,18 +9,19 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 import cli
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.exceptions import (
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.exceptions import (
     EnrichmentError,
     ProviderTimeoutError,
     SummarizationError,
 )
-from wiki_enrichment.domain.models import (
+from domain.models import (
     ArticleContent,
     BriefSummary,
     EnrichedContent,
     SearchResult,
 )
+from infrastructure.logging_config import LOGGER_NAME
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
 TRANSLATED = "A programming language."
@@ -45,6 +48,23 @@ def fast_plain_console(monkeypatch):
 @pytest.fixture(autouse=True)
 def no_real_ai_token(monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def isolated_logs(monkeypatch, tmp_path):
+    """Send application logs to a temporary folder and clean them up."""
+    logger = logging.getLogger(LOGGER_NAME)
+    monkeypatch.chdir(tmp_path)
+    yield tmp_path
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
+
+
+def read_log(workspace: Path) -> str:
+    """Return the contents of the run's log file."""
+    [log_file] = (workspace / "logs").glob("app_*.log")
+    return log_file.read_text(encoding="utf-8")
 
 
 @pytest.fixture
@@ -188,3 +208,40 @@ def test_full_flow_does_not_offer_a_summary_without_enriched_text(orchestrator) 
     assert result.exit_code == 0, result.output
     assert cli.SUMMARY_QUESTION not in result.output
     orchestrator.summarize.assert_not_called()
+
+
+def test_declining_the_summary_is_logged(orchestrator, tmp_path) -> None:
+    result = runner.invoke(cli.app, OPTIONS, input=CONFIRM + "N\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Brief summary declined by the user" in read_log(tmp_path)
+
+
+def test_requesting_the_summary_is_logged(orchestrator, tmp_path) -> None:
+    result = runner.invoke(cli.app, OPTIONS, input=CONFIRM + "Y\nY\nP\napuntes\nT\n")
+
+    assert result.exit_code == 0, result.output
+    content = read_log(tmp_path)
+    assert "Brief summary requested: target=inglés" in content
+    assert "Brief summary ready: title=Python" in content
+    assert "Summary export format selected: TXT" in content
+
+
+def test_summary_failure_is_logged(orchestrator, tmp_path) -> None:
+    orchestrator.summarize.side_effect = SummarizationError("no token")
+
+    result = runner.invoke(cli.app, OPTIONS, input=CONFIRM + "Y\nN\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Brief summary failed; continuing without it" in read_log(tmp_path)
+
+
+def test_missing_enriched_text_is_logged(orchestrator, tmp_path) -> None:
+    orchestrator.enrich_article.side_effect = EnrichmentError("no token")
+
+    result = runner.invoke(cli.app, OPTIONS, input=CONFIRM + "N\n")
+
+    assert result.exit_code == 0, result.output
+    content = read_log(tmp_path)
+    assert "AI enrichment failed" in content
+    assert "the brief summary is not offered" in content

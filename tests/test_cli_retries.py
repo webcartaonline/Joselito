@@ -10,13 +10,13 @@ from typer.testing import CliRunner
 
 import cli
 from tests.helpers.fake_time import FakeTime
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.exceptions import (
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.exceptions import (
     ProviderTimeoutError,
     RateLimitError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent, SearchResult
+from domain.models import ArticleContent, EnrichedContent, SearchResult
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
 ENRICHED = EnrichedContent(original_article=ARTICLE, ai_summary="Texto enriquecido.")

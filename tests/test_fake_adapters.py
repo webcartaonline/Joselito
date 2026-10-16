@@ -9,11 +9,12 @@ from tests.helpers.fake_adapters import (
     FakeTranslator,
     FakeWikipediaSource,
 )
-from wiki_enrichment.domain.exceptions import (
+from domain.exceptions import (
     ProviderTimeoutError,
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
+from domain.models import BriefSummary
 
 
 def test_fake_source_returns_fixed_article() -> None:
@@ -82,3 +83,15 @@ def test_fake_exporter_records_both_formats() -> None:
 
     assert exporter.saved_txt == [(content, "output/article.txt")]
     assert exporter.saved_pdf == [(content, "output/article.pdf")]
+
+
+def test_fake_exporter_records_summary_formats() -> None:
+    """Record summary txt and pdf exports without writing any files."""
+    summary = BriefSummary("Python", "Brief.", "Breve.")
+    exporter = FakeDocumentExporter()
+
+    exporter.export_summary_txt(summary, "output/article_summary.txt")
+    exporter.export_summary_pdf(summary, "output/article_summary.pdf")
+
+    assert exporter.saved_summary_txt == [(summary, "output/article_summary.txt")]
+    assert exporter.saved_summary_pdf == [(summary, "output/article_summary.pdf")]

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import requests
 
-REQUEST_TARGET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
+REQUEST_TARGET = "infrastructure.wikipedia.requests.get"
 DEFAULT_SEARCH_TITLE = "Python (programming language)"
 EXTRA_PARAGRAPH_COUNT = 7
 

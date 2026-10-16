@@ -15,8 +15,8 @@ from tests.helpers.fake_adapters import (
     FakeWikipediaSource,
 )
 
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.ports import ContentSummarizer
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.ports import ContentSummarizer
 
 
 def test_execute_runs_full_pipeline_with_fakes(

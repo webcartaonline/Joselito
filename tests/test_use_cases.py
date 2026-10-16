@@ -5,10 +5,10 @@ from unittest.mock import create_autospec
 import pytest
 
 from tests.helpers.content_mocks import make_article, make_enriched
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.models import SearchResult
-from wiki_enrichment.domain.models import BriefSummary
-from wiki_enrichment.domain.ports import (
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.models import SearchResult
+from domain.models import BriefSummary
+from domain.ports import (
     ContentEnricher,
     ContentSummarizer,
     DocumentExporter,

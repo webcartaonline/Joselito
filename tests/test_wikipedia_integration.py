@@ -8,15 +8,15 @@ from tests.helpers.wikipedia_mocks import (
     make_article_response,
     make_search_response,
 )
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.models import EnrichedContent
-from wiki_enrichment.domain.ports import (
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.models import EnrichedContent
+from domain.ports import (
     ContentEnricher,
     ContentSummarizer,
     DocumentExporter,
     Translator,
 )
-from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
+from infrastructure.wikipedia import WikipediaSourceAdapter
 
 
 @patch(REQUEST_TARGET)

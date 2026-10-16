@@ -13,12 +13,12 @@ from tests.helpers.wikipedia_mocks import (
     make_response,
     make_search_response,
 )
-from wiki_enrichment.domain.exceptions import (
+from domain.exceptions import (
     ProviderTimeoutError,
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.infrastructure.wikipedia import WikipediaSourceAdapter
+from infrastructure.wikipedia import WikipediaSourceAdapter
 
 scenarios("../features/wikipedia_scraping.feature")
 

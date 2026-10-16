@@ -20,15 +20,17 @@ from tests.helpers.fake_adapters import (
     FakeTranslator,
     FakeWikipediaSource,
 )
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.exceptions import (
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.exceptions import (
     EnrichmentError,
     ExportError,
     ProviderTimeoutError,
     ResourceNotFoundError,
+    SummarizationError,
 )
-from wiki_enrichment.domain.ports import ContentSummarizer
-from wiki_enrichment.infrastructure.logging_config import (
+from domain.models import BriefSummary
+from domain.ports import ContentSummarizer
+from infrastructure.logging_config import (
     DEFAULT_RUN_ID,
     LOGGER_NAME,
     configure_logging,
@@ -59,6 +61,7 @@ def build_orchestrator(
     enricher: FakeContentEnricher | None = None,
     translator: FakeTranslator | None = None,
     exporter: FakeDocumentExporter | None = None,
+    summarizer: ContentSummarizer | None = None,
 ) -> WikiEnrichmentOrchestrator:
     """Build an orchestrator wired with fakes and optional failures."""
 
@@ -67,7 +70,9 @@ def build_orchestrator(
         enricher if enricher is not None else FakeContentEnricher(),
         translator if translator is not None else FakeTranslator(),
         exporter if exporter is not None else FakeDocumentExporter(),
-        create_autospec(ContentSummarizer, instance=True),
+        summarizer if summarizer is not None else create_autospec(
+            ContentSummarizer, instance=True
+        ),
     )
 
 
@@ -220,3 +225,40 @@ def test_search_failure_is_logged_as_error(log_workspace: Path) -> None:
     content = read_log(log_workspace)
     assert "| ERROR |" in content
     assert "Article search failed" in content
+
+
+def test_summarize_logs_milestones(log_workspace: Path) -> None:
+    """Summarizing the enriched text leaves an INFO milestone."""
+    configure_logging()
+
+    build_orchestrator().summarize(make_enriched(), DEFAULT_TARGET_LANG)
+
+    assert "Summarizing text" in read_log(log_workspace)
+
+
+def test_summarize_failure_is_logged_as_error(log_workspace: Path) -> None:
+    """A failing summarizer logs an ERROR with the title."""
+    summarizer = create_autospec(ContentSummarizer, instance=True)
+    summarizer.summarize.side_effect = SummarizationError("no credits")
+    configure_logging()
+
+    with pytest.raises(SummarizationError):
+        build_orchestrator(summarizer=summarizer).summarize(
+            make_enriched(), DEFAULT_TARGET_LANG
+        )
+
+    content = read_log(log_workspace)
+    assert "| ERROR |" in content
+    assert "Summarization failed" in content
+
+
+def test_summary_export_logs_milestones(log_workspace: Path) -> None:
+    """Exporting the brief summary leaves an INFO milestone with the file."""
+    configure_logging()
+    summary = BriefSummary("Python", "Brief.", "Breve.")
+
+    build_orchestrator().export_summary(summary, "TXT", "output/notes_summary.txt")
+
+    content = read_log(log_workspace)
+    assert "Exporting summary" in content
+    assert "notes_summary.txt" in content

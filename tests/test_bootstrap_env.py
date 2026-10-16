@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-from wiki_enrichment import bootstrap
+import bootstrap
 
 
 def _write_bootstrap_at(tmp_root: Path) -> Path:
-    module_path = tmp_root / "src" / "wiki_enrichment" / "bootstrap.py"
+    module_path = tmp_root / "src" / "bootstrap.py"
     module_path.parent.mkdir(parents=True, exist_ok=True)
     module_path.write_text("# bootstrap stub\n", encoding="utf-8")
     return module_path

@@ -15,9 +15,9 @@ from tests.helpers.fake_adapters import (
     FakeTranslator,
     FakeWikipediaSource,
 )
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.models import SearchResult
-from wiki_enrichment.domain.ports import ContentSummarizer
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.models import SearchResult
+from domain.ports import ContentSummarizer
 
 LANGUAGE = "inglés"
 NO_EXPORT = "N\n"

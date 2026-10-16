@@ -1,6 +1,6 @@
 """Contract data builders for enrichment content tests."""
 
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from domain.models import ArticleContent, EnrichedContent
 
 DEFAULT_TITLE = "Python"
 DEFAULT_PARAGRAPHS = ["A programming language.", "It is widely used."]

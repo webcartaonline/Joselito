@@ -5,17 +5,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from wiki_enrichment.domain.exceptions import ProviderTimeoutError, WikiEnrichmentError
-from wiki_enrichment.infrastructure import translation
-from wiki_enrichment.infrastructure.translation import (
+from domain.exceptions import ProviderTimeoutError, WikiEnrichmentError
+from infrastructure import translation
+from infrastructure.translation import (
     MAX_RETRIES,
     REQUEST_TIMEOUT_SECONDS,
     TRANSLATE_URL,
     TranslationAdapter,
 )
 
-POST_TARGET = "wiki_enrichment.infrastructure.translation.requests.post"
-SLEEP_TARGET = "wiki_enrichment.infrastructure.translation.time.sleep"
+POST_TARGET = "infrastructure.translation.requests.post"
+SLEEP_TARGET = "infrastructure.translation.time.sleep"
 API_KEY = "test-key"
 
 

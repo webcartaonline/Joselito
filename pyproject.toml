@@ -21,11 +21,14 @@ test = [
     "pypdf==6.19.0",
 ]
 
+[tool.setuptools]
+py-modules = ["bootstrap"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-wiki_enrichment = ["infrastructure/fonts/*"]
+infrastructure = ["fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

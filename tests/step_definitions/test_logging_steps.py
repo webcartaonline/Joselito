@@ -15,10 +15,10 @@ from tests.helpers.fake_adapters import (
     FakeTranslator,
     FakeWikipediaSource,
 )
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.exceptions import ResourceNotFoundError
-from wiki_enrichment.domain.ports import ContentSummarizer
-from wiki_enrichment.infrastructure.logging_config import (
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.exceptions import ResourceNotFoundError
+from domain.ports import ContentSummarizer
+from infrastructure.logging_config import (
     DEFAULT_RUN_ID,
     LOGGER_NAME,
     configure_logging,

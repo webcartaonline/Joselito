@@ -5,14 +5,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from wiki_enrichment import bootstrap
-from wiki_enrichment.domain.exceptions import (
+import bootstrap
+from domain.exceptions import (
     ProviderTimeoutError,
     SummarizationError,
 )
-from wiki_enrichment.infrastructure.deepseek_summarizer import DeepSeekSummarizer
+from infrastructure.deepseek_summarizer import DeepSeekSummarizer
 
-POST_TARGET = "wiki_enrichment.infrastructure.deepseek_summarizer.requests.post"
+POST_TARGET = "infrastructure.deepseek_summarizer.requests.post"
 
 
 def make_response(content="A brief summary."):

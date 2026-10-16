@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from wiki_enrichment.infrastructure.logging_config import (
+from infrastructure.logging_config import (
     DEFAULT_RUN_ID,
     LOGGER_NAME,
     REDACTION_PLACEHOLDER,

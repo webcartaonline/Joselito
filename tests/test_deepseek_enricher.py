@@ -5,15 +5,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from wiki_enrichment import bootstrap
-from wiki_enrichment.domain.exceptions import (
+import bootstrap
+from domain.exceptions import (
     EnrichmentError,
     ProviderTimeoutError,
 )
-from wiki_enrichment.domain.models import ArticleContent
-from wiki_enrichment.infrastructure.deepseek_enricher import DeepSeekEnricher
+from domain.models import ArticleContent
+from infrastructure.deepseek_enricher import DeepSeekEnricher
 
-POST_TARGET = "wiki_enrichment.infrastructure.deepseek_enricher.requests.post"
+POST_TARGET = "infrastructure.deepseek_enricher.requests.post"
 
 
 def make_article(paragraphs=None) -> ArticleContent:
@@ -100,6 +100,6 @@ def test_bootstrap_uses_fallback_without_deepseek_key(monkeypatch) -> None:
 
     enricher = bootstrap.build_content_enricher()
 
-    from wiki_enrichment.infrastructure.ai import AIContentEnricher
+    from infrastructure.ai import AIContentEnricher
 
     assert isinstance(enricher, AIContentEnricher)

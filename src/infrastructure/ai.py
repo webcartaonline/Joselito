@@ -1,7 +1,7 @@
 """Fallback AI adapters used when no AI provider can be configured."""
 
-from wiki_enrichment.domain.exceptions import EnrichmentError, SummarizationError
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent
+from domain.exceptions import EnrichmentError, SummarizationError
+from domain.models import ArticleContent, EnrichedContent
 
 NO_PROVIDER_REASON = "No AI provider is configured."
 

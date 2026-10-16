@@ -1,7 +1,8 @@
-"""DeepSeek adapter implementing the ContentSummarizer port.
+"""DeepSeek adapter implementing the ContentEnricher port.
 
 Calls the OpenAI-compatible chat API (default ``https://api.deepseek.com/v1``)
-so brief summaries work without Hugging Face credits.
+so a DeepSeek API key (``sk-...``) can be used for enrichment without
+Hugging Face credits.
 """
 
 import os
@@ -9,28 +10,33 @@ import os
 import requests
 from dotenv import load_dotenv
 
-from wiki_enrichment.domain.exceptions import (
+from domain.exceptions import (
+    EnrichmentError,
     ProviderTimeoutError,
-    SummarizationError,
 )
+from domain.models import ArticleContent, EnrichedContent
 
 load_dotenv()
 
 SYSTEM_PROMPT = (
-    "Escribes resumenes muy breves. Usa tres o cuatro frases, responde "
-    "siempre en espanol, se fiel al texto y no inventes datos."
+    "Resumes y enriqueces articulos de enciclopedia. "
+    "Responde siempre en espanol, se fiel al contenido del articulo "
+    "y no inventes datos."
 )
 
 API_KEY_VARIABLE = "DEEPSEEK_API_KEY"
-MODEL_VARIABLE = "DEEPSEEK_SUMMARIZER_MODEL"
-FALLBACK_MODEL_VARIABLE = "DEEPSEEK_MODEL"
+MODEL_VARIABLE = "DEEPSEEK_MODEL"
 BASE_URL_VARIABLE = "DEEPSEEK_BASE_URL"
 DEFAULT_MODEL = "deepseek-chat"
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 
+# Same cap as the Hugging Face enricher: full Wikipedia articles would
+# waste money/time on every call.
+MAX_ARTICLE_CHARS = 4000
 
-class DeepSeekSummarizer:
-    """Generate a brief summary of a text using the DeepSeek API."""
+
+class DeepSeekEnricher:
+    """Enrich an article with an AI-generated summary using the DeepSeek API."""
 
     def __init__(
         self,
@@ -38,7 +44,7 @@ class DeepSeekSummarizer:
         api_key: str | None = None,
         base_url: str = DEFAULT_BASE_URL,
         timeout: float = 60.0,
-        max_tokens: int = 200,
+        max_tokens: int = 600,
     ) -> None:
         self._model = model
         self._base_url = base_url.rstrip("/")
@@ -46,16 +52,20 @@ class DeepSeekSummarizer:
         self._max_tokens = max_tokens
         key = api_key or os.getenv(API_KEY_VARIABLE)
         if not key:
-            raise SummarizationError(
+            raise EnrichmentError(
                 f"{API_KEY_VARIABLE} is not set. Add it to your .env file."
             )
         self._api_key = key
 
-    def summarize(self, text: str) -> str:
-        """Generate a brief summary for the given text."""
+    def enrich(self, article: ArticleContent) -> EnrichedContent:
+        """Generate an AI summary for the given article."""
 
-        if not text.strip():
-            raise SummarizationError("Cannot summarize an empty text.")
+        if not article.full_text.strip():
+            raise EnrichmentError("Cannot enrich an article without text.")
+
+        text = article.full_text.strip()
+        if len(text) > MAX_ARTICLE_CHARS:
+            text = text[:MAX_ARTICLE_CHARS] + "\n\n[Texto truncado para ahorrar coste de IA.]"
 
         try:
             response = requests.post(
@@ -67,7 +77,12 @@ class DeepSeekSummarizer:
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {
                             "role": "user",
-                            "content": f"Resume brevemente este texto en espanol: {text}",
+                            "content": (
+                                f"Titulo: {article.title}\n\n"
+                                f"Escribe en espanol un resumen claro y enriquecido "
+                                f"de este articulo:\n\n"
+                                f"{text}"
+                            ),
                         },
                     ],
                     "max_tokens": self._max_tokens,
@@ -75,17 +90,17 @@ class DeepSeekSummarizer:
                 timeout=self._timeout,
             )
             response.raise_for_status()
-            summary = (
+            content = (
                 response.json()["choices"][0]["message"].get("content") or ""
             ).strip()
         except (requests.Timeout, TimeoutError) as error:
             raise ProviderTimeoutError("DeepSeek request timed out.") from error
-        except SummarizationError:
+        except EnrichmentError:
             raise
         except Exception as error:
-            raise SummarizationError(f"AI summarization failed: {error}") from error
+            raise EnrichmentError(f"AI enrichment failed: {error}") from error
 
-        if not summary:
-            raise SummarizationError("The AI provider returned an empty summary.")
+        if not content:
+            raise EnrichmentError("The AI provider returned an empty summary.")
 
-        return summary
+        return EnrichedContent(original_article=article, ai_summary=content)

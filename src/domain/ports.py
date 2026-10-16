@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from wiki_enrichment.domain.models import (
+from domain.models import (
     ArticleContent,
     BriefSummary,
     EnrichedContent,

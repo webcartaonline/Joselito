@@ -19,21 +19,21 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.bootstrap import build_orchestrator
-from wiki_enrichment.domain.exceptions import (
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from bootstrap import build_orchestrator
+from domain.exceptions import (
     ProviderTimeoutError,
     RateLimitError,
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.domain.models import (
+from domain.models import (
     ArticleContent,
     BriefSummary,
     EnrichedContent,
     SearchResult,
 )
-from wiki_enrichment.infrastructure.logging_config import (
+from infrastructure.logging_config import (
     LOGGER_NAME,
     configure_logging,
     generate_run_id,
@@ -684,17 +684,30 @@ def enrich_article(orchestrator: WikiEnrichmentOrchestrator, article: ArticleCon
         [enriched] = run_steps([
             ("Enriqueciendo con IA...", lambda: orchestrator.enrich_article(article)),
         ])
-        return enriched.ai_summary
     except ProviderTimeoutError:
         print()
         show_error(ENRICH_TIMEOUT_ERROR)
+        logger.warning(
+            "AI enrichment timed out; exporting without enriched text: title=%s",
+            article.title,
+        )
         return ""
     except WikiEnrichmentError as error:
         print()
         detail = str(error)
         error_path = log_ai_error(f"Enriquecimiento con IA fallido.\nDetalle: {detail}\n")
         show_error(f"{ENRICH_ERROR}\n\nDetalle: {detail}\n\nHe guardado el detalle en {error_path}")
+        logger.error(
+            "AI enrichment failed; exporting without enriched text: title=%s",
+            article.title,
+        )
         return ""
+    logger.info(
+        "AI enrichment ready: title=%s characters=%d",
+        article.title,
+        len(enriched.ai_summary),
+    )
+    return enriched.ai_summary
 
 
 def show_enriched(ai_summary: str) -> None:
@@ -725,7 +738,9 @@ class BriefSummaryFlow:
     ) -> Optional[BriefSummary]:
         """Ask for a brief summary, generate it and show it before exporting."""
         if ask_option(SUMMARY_QUESTION, [YES, NO]) == NO:
+            logger.info("Brief summary declined by the user")
             return None
+        logger.info("Brief summary requested: target=%s", language)
         try:
             print()
             [summary] = run_steps([(
@@ -737,8 +752,12 @@ class BriefSummaryFlow:
             detail = str(error)
             error_path = log_ai_error(f"Resumen breve fallido.\nDetalle: {detail}\n")
             show_error(f"{SUMMARY_ERROR}\n\nDetalle: {detail}\n\nHe guardado el detalle en {error_path}")
+            logger.error(
+                "Brief summary failed; continuing without it: target=%s", language
+            )
             return None
         self.show(summary)
+        logger.info("Brief summary ready: title=%s", summary.title)
         return summary
 
     @staticmethod
@@ -752,7 +771,9 @@ class BriefSummaryFlow:
     @staticmethod
     def ask_format() -> str:
         """Ask in which format the summary is saved, apart from the enriched text."""
-        return EXPORT_FORMATS[ask_option(SUMMARY_FORMAT_QUESTION, EXPORT_FORMATS)]
+        summary_format = EXPORT_FORMATS[ask_option(SUMMARY_FORMAT_QUESTION, EXPORT_FORMATS)]
+        logger.info("Summary export format selected: %s", summary_format)
+        return summary_format
 
 
 def summary_path(path: str, summary_format: str) -> str:
@@ -836,6 +857,8 @@ def run_app(tema: Optional[str], idioma: Optional[str]) -> None:
     summary = None
     if ai_summary:
         summary = BriefSummaryFlow(orchestrator).request(content, language)
+    else:
+        logger.info("No enriched text available; the brief summary is not offered")
     export_format, file_name = export_research(orchestrator, content, summary)
     logger.info("Export result: format=%s file=%s", export_format, file_name)
 

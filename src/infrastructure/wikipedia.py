@@ -8,13 +8,14 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-from wiki_enrichment.domain.exceptions import (
+from domain.exceptions import (
     ProviderTimeoutError,
     RateLimitError,
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.domain.models import ArticleContent, SearchResult
+from domain.models import ArticleContent, SearchResult
+from infrastructure.logging_config import LOGGER_NAME
 
 MAX_PARAGRAPHS = 5
 REQUEST_TIMEOUT_SECONDS = 10
@@ -55,7 +56,7 @@ def domain_errors() -> Iterator[None]:
     except requests.RequestException as exc:
         raise WikiEnrichmentError(f"Could not reach Wikipedia: {exc}") from exc
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"{LOGGER_NAME}.{__name__}")
 
 
 class WikipediaSourceAdapter:

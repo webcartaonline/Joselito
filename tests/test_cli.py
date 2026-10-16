@@ -16,18 +16,18 @@ from tests.helpers.fake_adapters import (
     FakeTranslator,
     FakeWikipediaSource,
 )
-from wiki_enrichment.application.use_cases import WikiEnrichmentOrchestrator
-from wiki_enrichment.domain.exceptions import (
+from application.wiki_enrichment_orchestrator import WikiEnrichmentOrchestrator
+from domain.exceptions import (
     EnrichmentError,
     ExportError,
     ProviderTimeoutError,
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.domain.models import ArticleContent, EnrichedContent, SearchResult
-from wiki_enrichment.domain.ports import ContentSummarizer
-from wiki_enrichment.infrastructure.exporters import EMPTY_SECTION_TEXT, DocumentExporterAdapter
-from wiki_enrichment.infrastructure.logging_config import LOGGER_NAME
+from domain.models import ArticleContent, EnrichedContent, SearchResult
+from domain.ports import ContentSummarizer
+from infrastructure.exporters import EMPTY_SECTION_TEXT, DocumentExporterAdapter
+from infrastructure.logging_config import LOGGER_NAME
 
 ARTICLE = ArticleContent("Python", ["A programming language."])
 RESULTS = [SearchResult("Python", "Un lenguaje de programación.")]
@@ -51,8 +51,8 @@ CONTENT = EnrichedContent(
     ai_summary=AI_TEXT,
     translated_summary=TRANSLATED,
 )
-GET = "wiki_enrichment.infrastructure.wikipedia.requests.get"
-TRANSLATION_POST = "wiki_enrichment.infrastructure.translation.requests.post"
+GET = "infrastructure.wikipedia.requests.get"
+TRANSLATION_POST = "infrastructure.translation.requests.post"
 OPTIONS = ["--tema", "Python", "--idioma", "inglés"]
 EMPTY_TEXT_ERROR = "No has escrito nada. Inténtalo de nuevo."
 NETWORK_ERROR = "No he podido conectar con Wikipedia"

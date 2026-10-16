@@ -13,14 +13,14 @@ from tests.helpers.wikipedia_mocks import (
     make_response,
     make_results_response,
 )
-from wiki_enrichment.domain.exceptions import (
+from domain.exceptions import (
     ProviderTimeoutError,
     RateLimitError,
     ResourceNotFoundError,
     WikiEnrichmentError,
 )
-from wiki_enrichment.domain.models import SearchResult
-from wiki_enrichment.infrastructure.wikipedia import (
+from domain.models import SearchResult
+from infrastructure.wikipedia import (
     HEADERS,
     REQUEST_TIMEOUT_SECONDS,
     SEARCH_RESULTS_LIMIT,
