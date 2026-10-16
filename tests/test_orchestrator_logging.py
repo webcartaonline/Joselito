@@ -168,6 +168,30 @@ def test_translate_failure_is_logged_as_error(log_workspace: Path) -> None:
     assert "Translation failed" in content
 
 
+def test_translate_article_logs_milestones(log_workspace: Path) -> None:
+    """Translating a full article leaves an INFO milestone in the log."""
+    configure_logging()
+
+    build_orchestrator().translate_article(make_article(), DEFAULT_TARGET_LANG)
+
+    assert "Translating article" in read_log(log_workspace)
+
+
+def test_translate_article_failure_is_logged_as_error(log_workspace: Path) -> None:
+    """A failing article translator logs an ERROR with the title and language."""
+    translator = FakeTranslator(failure=ProviderTimeoutError("slow"))
+    configure_logging()
+
+    with pytest.raises(ProviderTimeoutError):
+        build_orchestrator(translator=translator).translate_article(
+            make_article(), DEFAULT_TARGET_LANG
+        )
+
+    content = read_log(log_workspace)
+    assert "| ERROR |" in content
+    assert "Article translation failed" in content
+
+
 def test_debug_details_are_hidden_at_info_level(log_workspace: Path) -> None:
     """Detail records are not written when the level is INFO."""
     configure_logging()

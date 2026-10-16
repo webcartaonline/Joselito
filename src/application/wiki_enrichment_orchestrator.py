@@ -96,7 +96,26 @@ class WikiEnrichmentOrchestrator:
     def translate_article(self, article: ArticleContent, target_lang: str) -> str:
         """Translate the fetched article while keeping provider I/O in its adapter."""
 
-        return self._translator.translate(article.full_text, target_lang)
+        logger.info(
+            "Translating article: title=%s target=%s", article.title, target_lang
+        )
+        try:
+            translated = self._translator.translate(article.full_text, target_lang)
+        except WikiEnrichmentError:
+            logger.error(
+                "Article translation failed: title=%s target=%s",
+                article.title,
+                target_lang,
+                exc_info=True,
+            )
+            raise
+        logger.debug(
+            "Article translated: title=%s target=%s characters=%d",
+            article.title,
+            target_lang,
+            len(translated),
+        )
+        return translated
 
     def enrich_article(self, article: ArticleContent) -> EnrichedContent:
         """Enrich an already fetched article without translating or exporting it."""
